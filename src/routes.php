@@ -10,7 +10,7 @@ Route::get('queue-export-csv',function(\Illuminate\Http\Request $request){
     $params = $request->all();
     $queue_export = new QueueExport();
     $queue_export
-        ->setQExId($params['qExId'])
+        ->setTaskId($params['taskId'])
         ->exportCsv();
 });
 
@@ -18,7 +18,7 @@ Route::get('queue-export-xls',function(\Illuminate\Http\Request $request){
     $params = $request->all();
     $queue_export = new QueueExport();
     $file = $queue_export
-        ->setQExId($params['qExId'])
+        ->setTaskId($params['taskId'])
         ->exportXls();
 
     return response()->download($file)->deleteFileAfterSend(true);

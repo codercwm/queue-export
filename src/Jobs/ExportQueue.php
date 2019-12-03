@@ -3,6 +3,7 @@
 namespace Codercwm\QueueExport\Jobs;
 
 use Codercwm\QueueExport\QueueExport;
+use Codercwm\QueueExport\Services\LogService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Queue\InteractsWithQueue;
@@ -54,10 +55,11 @@ class ExportQueue implements ShouldQueue
     {
         try{
 //            throw new \Exception('手动失败');
-            $this->queueExport->setQExId($this->qExId);
+            $this->queueExport->setTaskId($this->qExId);
             $this->queueExport->read($this->batchCurrent);
         }catch (\Exception $exception){
-            $this->queueExport->qExFail($exception);
+            LogService::write($exception->getFile().'---'.$exception->getLine().'---'.$exception->getMessage(),'asdklfjskladf');
+            $this->queueExport->fail($exception);
         }
 
         $expire_timestamp = $this->queueExport->get('expire_timestamp');
@@ -72,6 +74,7 @@ class ExportQueue implements ShouldQueue
      */
     public function failed(\Exception $exception)
     {
-        $this->queueExport->qExFail($exception);
+        LogService::write($exception->getFile().'---'.$exception->getLine().'---'.$exception->getMessage(),'asdklfjskladf');
+        $this->queueExport->fail($exception);
     }
 }

@@ -14,9 +14,9 @@ class QueueExportServiceProvider extends ServiceProvider
     public function boot()
     {
         $this->loadRoutesFrom(__DIR__.'/routes.php');
-        /*$this->publishes([
+        $this->publishes([
             __DIR__.'/../config/queue_export.php' => config_path('queue_export.php')
-        ]);*/
+        ]);
     }
 
     /**
@@ -26,8 +26,6 @@ class QueueExportServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        /*$this->app->singleton('queue_export',function($app){
-//            return new QueueExport($app['config']);
-        });*/
+        
     }
 }
