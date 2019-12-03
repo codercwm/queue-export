@@ -1,0 +1,20 @@
+{
+    "name": "codercwm/queue-export",
+    "require": {
+        "phpoffice/phpspreadsheet": "^1.6",
+        "monolog/monolog": "~1.12"
+    },
+    "authors": [
+        {
+            "name": "codercwm",
+            "email": "987950059@qq.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Codercwm\\QueueExport\\QueueExportServiceProvider"
+            ]
+        }
+    }
+}
