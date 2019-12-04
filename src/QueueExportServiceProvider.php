@@ -26,6 +26,6 @@ class QueueExportServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        
+
     }
 }

@@ -157,7 +157,11 @@ class QueueExport{
                     (0==$this->isCancel())&&
                     ($this->get('model')==$task['model'])
                 ){
-                    if($this->get('total_count')>$this->progress()) {
+                    if(
+                        $this->get('total_count')>$this->progressRead()
+                        ||
+                        $this->get('total_count')>$this->progressWrite()
+                    ) {
                         $this->exception('请等待当前任务完成');
                     }
                 }
@@ -197,21 +201,21 @@ class QueueExport{
 
         //把任务保存到缓存
         //设置超时时间
-        $expire = intval($config['expire']/60);
-        Cache::put($this->taskId,$this->get(), $expire);
+        Cache::put($this->taskId,$this->get(), $this->expire());
 
         //保存所有taskId
         $task_id_arr = Cache::pull($this->get('cid'))??[];
         array_push($task_id_arr,$this->taskId);
         Cache::forever($this->get('cid'),$task_id_arr);
 
-        $this->progress(0);
+        $this->progressRead(0);
+        $this->progressWrite(0);
 
         return true;
     }
 
     private function cacheAdd($key,$value,$type='add'){
-        return Cache::$type($this->taskId.'_'.$key,$value,intval(($this->get('expire_timestamp')-time())/60));
+        return Cache::$type($this->taskId.'_'.$key,$value,$this->expire());
     }
 
     private function downloadUrl($download_url=null){
@@ -249,11 +253,41 @@ class QueueExport{
         return $this->cacheAdd('complete',time());
     }
 
-    private function progress($progress=null){
-        if(is_null($progress)){
-            return Cache::get($this->taskId.'_progress')??0;
+    private function progressRead($incr=null,$task_id=null){
+        if(is_null($task_id)){
+            $task_id = $this->taskId;
         }
-        return $this->cacheAdd('progress',$progress,'put');
+        if(is_null($incr)){
+            return Redis::get($task_id.'_progress_read');
+        }
+        Redis::incrby($task_id.'_progress_read',$incr);
+        if(0==$incr){
+            Redis::expire($task_id.'_progress_read',$this->expire(null,$this->expire()));
+        }
+    }
+
+    private function progressWrite($incr=null,$task_id=null){
+        if(is_null($task_id)){
+            $task_id = $this->taskId;
+        }
+        if(is_null($incr)){
+            return Redis::get($task_id.'_progress_write');
+        }
+        Redis::incrby($task_id.'_progress_write',$incr);
+        if(0==$incr){
+            Redis::expire($task_id.'_progress_write',$this->expire(null,$this->expire()));
+        }
+    }
+
+    private function expire($expire_timestamp=null,$type='seconds'){
+        if(is_null($expire_timestamp)){
+            $expire_timestamp = $this->get('expire_timestamp');
+        }
+        if('seconds'==$type){
+            return intval(($expire_timestamp-time())/60);
+        }else{
+            return intval($expire_timestamp-time());
+        }
     }
 
     /**
@@ -271,16 +305,32 @@ class QueueExport{
             if(!Cache::has($key)) continue;
             $data = Cache::pull($key);
             if(empty($data['filename'])) continue;
-            $data['progress'] = Cache::get($key.'_progress')??0;
+            $data['progress_read'] = $this->progressRead(null,$key);
+            $data['progress_write'] = $this->progressWrite(null,$key);
             $data['is_fail'] = Cache::get($key.'_is_fail')??0;
             $data['is_cancel'] = Cache::get($key.'_is_cancel')??0;
             $data['complete'] = Cache::get($key.'_complete')??0;
             $data['download_url'] = Cache::get($key.'_download_url')??'';
             $data['show_name'] = Cache::get($key.'_show_name')??'';
+            //计算百分比
+            $percent = 0;
+            if($data['total_count']>0){
+                if(''==$data['download_url']){
+                    $percent = bcmul(
+                        ($data['progress_read']+$data['progress_write'])
+                        /
+                        ($data['total_count']+$data['total_count'])
+                    ,100,0);
+                    if($percent>98) $percent = 96;
+                }else{
+                    $percent = 100;
+                }
+            }
+            $data['percent'] = $percent.'%';
             if(
                 (0==$data['is_fail'])&&
                 (0==$data['is_cancel'])&&
-                (0==$data['progress'])&&
+                (0==$data['progress_read'])&&
                 (10<=(time()-$data['timestamp']))
             ){
                 $data['show_name'] = '任务正在排队';
@@ -293,7 +343,7 @@ class QueueExport{
                 $task_list[] = $data;
             }
             $task_id_arr[] = $key;
-            Cache::put($key,$data,intval(($data['expire_timestamp']-time())/60));
+            Cache::put($key,$data,$this->expire($data['expire_timestamp']));
         }
         Cache::forever($this->get('cid'),$task_id_arr);
         array_multisort(array_column($task_list,'timestamp'),SORT_DESC,$task_list);
@@ -315,12 +365,14 @@ class QueueExport{
                     $this->queue();//创建队列任务
                     break;
                 case 'syncCsv':
-                    $this->progress($this->get('total_count'));
+                    $this->progressRead($this->get('total_count'));
+                    $this->progressWrite($this->get('total_count'));
                     $this->complete(true);
                     $this->downloadUrl(request()->getSchemeAndHttpHost().'/queue-export-csv'.'?taskId='.$this->get('task_id'));
                     break;
                 case 'syncXls':
-                    $this->progress($this->get('total_count'));
+                    $this->progressRead($this->get('total_count'));
+                    $this->progressWrite($this->get('total_count'));
                     $this->complete(true);
                     $this->downloadUrl(request()->getSchemeAndHttpHost().'/queue-export-xls'.'?taskId='.$this->get('task_id'));
                     break;
@@ -351,10 +403,7 @@ class QueueExport{
 
         $task_info = $this->get();
 
-        $model = $task_info['model'];
-        $model_method = $task_info['model_method'];
-        $model_params = $task_info['model_params'];
-        $query = $model::$model_method($model_params);
+        $query = $this->buildQuery();
         if(isset($query->count)){
             $total_count = $query->count;
         }else{
@@ -413,13 +462,7 @@ class QueueExport{
 
         set_time_limit(0);
 
-        $task_info = $this->get();
-
-        $model = $task_info['model'];
-        $model_method = $task_info['model_method'];
-        $model_params = $task_info['model_params'];
-        $query = $model::$model_method($model_params);
-
+        $query = $this->buildQuery();
         $datas = [];
 
         $query
@@ -481,6 +524,7 @@ class QueueExport{
                     $set_data->setCellValue($coordinate[$coordinate_i].$row, $value);
                     $coordinate_i++;
                 }
+                $this->progressWrite(1);
                 $row++;
             }
             unset($datas);
@@ -526,22 +570,23 @@ class QueueExport{
      * @param $batch_current
      */
     public function read($batch_current){
-        $task_info = $this->get();
+
         //如果任务已经失败或已取消，就不再往下执行了
         if($this->isFail()||$this->isCancel()){
             return false;
         }
 
+        $task_info = $this->get();
         //开始读取之后把show_name改成文件名，因为开始读取前show_name可能是“任务正在排队”
+        if(!isset($task_info['filename'])) {
+            LogService::write(print_r($task_info,true),'asdklfjskladf');
+            LogService::write(print_r($this->taskId,true),'asdklfjskladf111111111111111');
+        }
         if($this->showName()!=$task_info['filename']){
             $this->showName($task_info['filename']);
         }
 
-        $model_method = $task_info['model_method'];
-        $model = $task_info['model'];
-        $model_params = $task_info['model_params'];
-
-        $query = $model::$model_method($model_params);
+        $query = $this->buildQuery();
 
         $datas = [];
 
@@ -551,7 +596,7 @@ class QueueExport{
             ->get()
             ->each(function($item)use(&$datas){
                 $datas[] = $this->getFieldValue($item);
-                Cache::increment($this->taskId.'_progress',1);
+                $this->progressRead(1);
             });
 
         $this->appendToCache($datas,$batch_current);
@@ -559,7 +604,7 @@ class QueueExport{
     }
 
     private function appendToCache($datas,$batch_current){
-        Cache::put($this->filePath(true).'_'.$batch_current,$datas,intval($this->config('expire')/60));
+        Cache::put($this->filePath(true).'_'.$batch_current,$datas,$this->expire());
 
         if($this->config('multi_file')){
             $this->writeOne($batch_current);
@@ -759,7 +804,12 @@ class QueueExport{
 
     private function isCompleted(){
         //导出的数量不等于总数量，不合并
-        if($this->progress()!=$this->get('total_count')){
+        if($this->progressRead()!=$this->get('total_count')){
+            return false;
+        }
+
+        //写入文件的行数不等于总数量，不合并
+        if($this->progressWrite()!=$this->get('total_count')){
             return false;
         }
 
@@ -778,6 +828,8 @@ class QueueExport{
             return false;
         }
 
+        //任务完成后，设置过期时间
+
         return true;
     }
 
@@ -785,8 +837,9 @@ class QueueExport{
      * 生成excel文件
      */
     private function writeAll(){
+        $this->write(1,$this->get('batch_count'));
+
         if($this->isCompleted()){
-            $this->write(1,$this->get('batch_count'));
             //上传到oss
             $this->upload();
         }
@@ -882,7 +935,8 @@ class QueueExport{
         Cache::forget($this->taskId.'_is_fail');
         Cache::forget($this->taskId.'_is_cancel');
         Cache::forget($this->taskId.'_complete');
-        Cache::forget($this->taskId.'_progress');
+        Redis::del($this->taskId.'_progress_read');
+        Redis::del($this->taskId.'_progress_write');
         Cache::forget($this->filePath(true));
     }
 
@@ -951,6 +1005,6 @@ class QueueExport{
     private function qExSetProgress(){
         $inc = sprintf('%.2f',45/$this->qExGet('batch_count'));
         $this->log($inc);
-        Redis::hincrbyfloat($this->taskId, 'progress',$inc);
+        Redis::hincrbyfloat($this->taskId, 'progress_read',$inc);
     }
 }

@@ -58,7 +58,6 @@ class ExportQueue implements ShouldQueue
             $this->queueExport->setTaskId($this->qExId);
             $this->queueExport->read($this->batchCurrent);
         }catch (\Exception $exception){
-            LogService::write($exception->getFile().'---'.$exception->getLine().'---'.$exception->getMessage(),'asdklfjskladf');
             $this->queueExport->fail($exception);
         }
 
@@ -74,7 +73,6 @@ class ExportQueue implements ShouldQueue
      */
     public function failed(\Exception $exception)
     {
-        LogService::write($exception->getFile().'---'.$exception->getLine().'---'.$exception->getMessage(),'asdklfjskladf');
         $this->queueExport->fail($exception);
     }
 }
