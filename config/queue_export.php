@@ -8,4 +8,5 @@ return [
     'multi_file' => true,//是否允许多文件
     'allow_export_type' => ['queue','syncCsv','syncXls'],
     'file_size' => 400,//分文件时，一个文件多少条，必须比batch_size大
+    'upload_oss' => false,//是否上传到oss
 ];

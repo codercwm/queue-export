@@ -199,6 +199,9 @@ class QueueExport{
         //任务过期的时间戳
         $this->set('expire_timestamp',$this->get('timestamp')+$config['expire']);
 
+        //获取域名
+        $this->set('http_host',request()->getSchemeAndHttpHost());
+
         //把任务保存到缓存
         //设置超时时间
         Cache::put($this->taskId,$this->get(), $this->expire());
@@ -221,6 +224,13 @@ class QueueExport{
             return Cache::get($this->taskId.'_download_url')??'';
         }
         return $this->cacheAdd('download_url',$download_url);
+    }
+
+    public function localPath($local_path=null){
+        if(is_null($local_path)){
+            return Cache::get($this->taskId.'_local_path')??'';
+        }
+        return $this->cacheAdd('local_path',$local_path);
     }
 
     private function showName($show_name=null){
@@ -296,8 +306,9 @@ class QueueExport{
             $task_id_arr = $this->allTaskId($cid);
             array_push($task_id_arr,$this->taskId);
             Cache::forever($cid.'_allTaskId',$task_id_arr);
+            return $task_id_arr;
         }
-        return Cache::pull($cid.'_allTaskId')??[];
+        return Cache::get($cid.'_allTaskId')??[];
     }
 
     /**
@@ -313,7 +324,7 @@ class QueueExport{
         $task_id_arr = [];
         foreach($keys as $key){
             if(!Cache::has($key)) continue;
-            $data = Cache::pull($key);
+            $data = Cache::get($key);
             if(empty($data['filename'])) continue;
             $data['progress_read'] = $this->progressRead(null,$key);
             $data['progress_write'] = $this->progressWrite(null,$key);
@@ -321,6 +332,7 @@ class QueueExport{
             $data['is_cancel'] = Cache::get($key.'_is_cancel')??0;
             $data['complete'] = Cache::get($key.'_complete')??0;
             $data['download_url'] = Cache::get($key.'_download_url')??'';
+            $data['local_path'] = Cache::get($key.'_local_path')??'';
             $data['show_name'] = Cache::get($key.'_show_name')??'';
             //计算百分比
             $percent = 0;
@@ -355,7 +367,8 @@ class QueueExport{
             $task_id_arr[] = $key;
             Cache::put($key,$data,$this->expire($data['expire_timestamp']));
         }
-        Cache::forever($this->get('cid'),$task_id_arr);
+        //把全部tack_id重新保存进去
+        Cache::forever($cid.'_allTaskId',$task_id_arr);
         array_multisort(array_column($task_list,'timestamp'),SORT_DESC,$task_list);
         return $task_list;
     }
@@ -710,6 +723,20 @@ class QueueExport{
         LogService::write($str,'EXPORT_QUEUE');
     }
 
+    //获取用点分隔的多维数组的值
+    public function getDotValue($item,$field){
+        $field = explode('.',$field);
+        $value = $item;
+        foreach ($field as $f){
+            if(!isset($value[$f])){
+                $value = $f;
+                break;
+            }
+            $value = $value[$f];
+        }
+        return $value;
+    }
+
     //获取一行数据
     private function getFieldValue($item){
 
@@ -740,7 +767,7 @@ class QueueExport{
 
                 //                $value = $this->qExGetFieldValueFromFunc($item,$field);
 
-                $field = explode('.',$field);
+                /*$field = explode('.',$field);
                 $value = $item;
                 foreach ($field as $f){
                     if(!isset($value[$f])){
@@ -748,7 +775,8 @@ class QueueExport{
                         break;
                     }
                     $value = $value[$f];
-                }
+                }*/
+                $value = $this->getDotValue($item,$field);
 
                 //如果有字典
                 if(!empty($dict_arr)&&isset($dict_arr[$value])){
@@ -856,25 +884,30 @@ class QueueExport{
     //把文件上传到oss
     private function upload($del_local=true){
         $file_path = $this->filePath();
-        $this->downloadUrl($file_path);
 
-        /*//文件名
-        $file_name = basename($file_path);
-        //文件在oss上的路径
-        $oss_path =  'queue_export/'.$file_name;
-        //上传文件
-        $oss_client = new OssClient(config('oss.accessKeyId'), config('oss.accessKeySecret'), config('oss.endpoint'));
-        $oss_client->uploadFile(config('oss.bucket'), $oss_path, $file_path);
-        //删除文件
-        if($del_local){
-            unlink($file_path);
+        //上传到oss
+        if($this->get('upload_oss')){
+            //文件名
+            $file_name = basename($file_path);
+            //文件在oss上的路径
+            $oss_path =  'queue_export/'.$file_name;
+            //上传文件
+            $oss_client = new OssClient(config('oss.accessKeyId'), config('oss.accessKeySecret'), config('oss.endpoint'));
+            $oss_client->uploadFile(config('oss.bucket'), $oss_path, $file_path);
+            //删除文件
+            if($del_local){
+                unlink($file_path);
+            }
+
+            $download_url = config('oss.host').'/'.$oss_path;
+            $this->log('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-$this->qExGet('timestamp')));
+        }else{
+            $this->localPath($file_path);
+            $download_url = $this->get('http_host').'/queue-export-download-local'.'?taskId='.$this->get('task_id');
         }
 
-        $download_url = config('oss.host').'/'.$oss_path;
-        $this->log('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-$this->qExGet('timestamp')));
+        $this->downloadUrl($download_url);
 
-
-        $this->qExSet('url',$download_url);*/
     }
 
     /**
@@ -939,6 +972,7 @@ class QueueExport{
     public function del(){
         Cache::forget($this->taskId);
         Cache::forget($this->taskId.'_download_url');
+        Cache::forget($this->taskId.'_local_path');
         Cache::forget($this->taskId.'_show_name');
         Cache::forget($this->taskId.'_is_fail');
         Cache::forget($this->taskId.'_is_cancel');
@@ -964,17 +998,16 @@ class QueueExport{
         }
     }
 
-    public function exportFromCollection(Collection $collction){
+    //一个直接导出的方法
+    public function exportCsvFromCollection(Collection $collction){
         set_time_limit(0);
 
 
         $datas = [];
 
-        $fields = $this->get('fields');
-
         $collction
-            ->each(function($item)use($fields,&$datas){
-                $datas[] = $this->getFieldValue($item,$fields);
+            ->each(function($item)use(&$datas){
+                $datas[] = $this->getFieldValue($item);
             });
 
         //下载数据 ↓
@@ -1008,11 +1041,5 @@ class QueueExport{
         fclose($fp);
         exit;
 
-    }
-
-    private function qExSetProgress(){
-        $inc = sprintf('%.2f',45/$this->qExGet('batch_count'));
-        $this->log($inc);
-        Redis::hincrbyfloat($this->taskId, 'progress_read',$inc);
     }
 }

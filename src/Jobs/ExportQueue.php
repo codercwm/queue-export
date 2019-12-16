@@ -30,7 +30,7 @@ class ExportQueue implements ShouldQueue
      *
      * @var int
      */
-    public $tries = 3;
+    public $tries = 2;
 
     /**
      * Create a new job instance.

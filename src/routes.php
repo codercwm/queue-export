@@ -23,3 +23,17 @@ Route::get('queue-export-xls',function(\Illuminate\Http\Request $request){
 
     return response()->download($file)->deleteFileAfterSend(true);
 });
+
+Route::get('queue-export-download-local',function(\Illuminate\Http\Request $request){
+    $params = $request->all();
+    $queue_export = new QueueExport();
+    $file = $queue_export
+        ->setTaskId($params['taskId'])
+        ->localPath();
+
+    if(!file_exists($file)){
+        return '文件不存在';
+    }
+
+    return response()->download($file)->deleteFileAfterSend(false);
+});
