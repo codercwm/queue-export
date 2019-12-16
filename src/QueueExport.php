@@ -724,7 +724,7 @@ class QueueExport{
     }
 
     //获取用点分隔的多维数组的值
-    public function getDotValue($item,$field){
+    private function getDotValue($item,$field){
         $field = explode('.',$field);
         $value = $item;
         foreach ($field as $f){
@@ -765,18 +765,24 @@ class QueueExport{
                     }
                 }
 
-                //                $value = $this->qExGetFieldValueFromFunc($item,$field);
+                $value = $field;
+                //看有没有函数，有就调用函数
+                $func_name = substr($value,0,(strpos($value,'(')));//func();
+                if(strpos($value,'(')&&strpos($value,')')&&function_exists($func_name)){
+                    $sub_start = strpos($value,'(');
+                    $sub_end = strripos($value,')');
+                    $func_param_str = substr($value,$sub_start+1,$sub_end-$sub_start-1);
+                    $func_param_arr = explode(',',$func_param_str);
+                    $func_param_arr = array_map(function($va){return str_replace(['"',"'"],'',$va);},$func_param_arr);
 
-                /*$field = explode('.',$field);
-                $value = $item;
-                foreach ($field as $f){
-                    if(!isset($value[$f])){
-                        $value = '';
-                        break;
+                    $dot_value_arr = [];
+                    foreach ($func_param_arr as $func_param){
+                        $dot_value_arr[] = $this->getDotValue($item,$func_param);
                     }
-                    $value = $value[$f];
-                }*/
-                $value = $this->getDotValue($item,$field);
+                    $value = call_user_func_array($func_name,$dot_value_arr);
+                }else{
+                    $value = $this->getDotValue($item,$value);
+                }
 
                 //如果有字典
                 if(!empty($dict_arr)&&isset($dict_arr[$value])){
