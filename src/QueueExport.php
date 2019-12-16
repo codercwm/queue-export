@@ -204,9 +204,7 @@ class QueueExport{
         Cache::put($this->taskId,$this->get(), $this->expire());
 
         //保存所有taskId
-        $task_id_arr = Cache::pull($this->get('cid'))??[];
-        array_push($task_id_arr,$this->taskId);
-        Cache::forever($this->get('cid'),$task_id_arr);
+        $this->allTaskId(null,true);
 
         $this->progressRead(0);
         $this->progressWrite(0);
@@ -290,6 +288,18 @@ class QueueExport{
         }
     }
 
+    private function allTaskId($cid=null,$refresh=false){
+        if(is_null($cid)){
+            $cid = $this->get('cid');
+        }
+        if($refresh){
+            $task_id_arr = $this->allTaskId($cid);
+            array_push($task_id_arr,$this->taskId);
+            Cache::forever($cid.'_allTaskId',$task_id_arr);
+        }
+        return Cache::pull($cid.'_allTaskId')??[];
+    }
+
     /**
      * 获取所有任务
      * @return array
@@ -298,7 +308,7 @@ class QueueExport{
         if(''===$cid) $cid = $this->get('cid');
         if(is_null($cid)) return [];
         //获取所有key
-        $keys = Cache::pull($cid)??[];
+        $keys = $this->allTaskId($cid);
         $task_list = [];
         $task_id_arr = [];
         foreach($keys as $key){
@@ -828,8 +838,6 @@ class QueueExport{
             return false;
         }
 
-        //任务完成后，设置过期时间
-
         return true;
     }
 
@@ -940,7 +948,23 @@ class QueueExport{
         Cache::forget($this->filePath(true));
     }
 
-    public function qExExportFromCollection(Collection $collction){
+    /**
+     * 删除所有任务
+     * @return array
+     */
+    public function delAll($cid=''){
+        if(''===$cid) $cid = $this->get('cid');
+        //模糊搜索key
+        $keys = Redis::keys($cid.'QUEUE_EXPORT*');
+        foreach($keys as $key){
+            if(!Redis::exists($key)) continue;
+            if('hash'!=strval(Redis::type($key))) continue;
+            if(empty(Redis::hget($key,'filename'))) continue;
+            Redis::del($key);
+        }
+    }
+
+    public function exportFromCollection(Collection $collction){
         set_time_limit(0);
 
 
@@ -984,22 +1008,6 @@ class QueueExport{
         fclose($fp);
         exit;
 
-    }
-
-    /**
-     * 删除所有任务
-     * @return array
-     */
-    public function delAll($cid=''){
-        if(''===$cid) $cid = $this->get('cid');
-        //模糊搜索key
-        $keys = Redis::keys($cid.'QUEUE_EXPORT*');
-        foreach($keys as $key){
-            if(!Redis::exists($key)) continue;
-            if('hash'!=strval(Redis::type($key))) continue;
-            if(empty(Redis::hget($key,'filename'))) continue;
-            Redis::del($key);
-        }
     }
 
     private function qExSetProgress(){
