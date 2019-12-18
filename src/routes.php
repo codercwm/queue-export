@@ -37,3 +37,11 @@ Route::get('queue-export-download-local',function(\Illuminate\Http\Request $requ
 
     return response()->download($file)->deleteFileAfterSend(false);
 });
+
+Route::get('queue-export-cancel',function(\Illuminate\Http\Request $request){
+    $params = $request->all();
+    $queue_export = new QueueExport();
+    $queue_export
+        ->setTaskId($params['taskId'])
+        ->cancel();
+});

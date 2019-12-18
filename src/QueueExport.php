@@ -153,16 +153,17 @@ class QueueExport{
             $task_list = $this->allTask($this->get('cid'));
             foreach ($task_list as $task){
                 if(
-                    (0==$this->isFail())&&
-                    (0==$this->isCancel())&&
+                    (0==$task['is_fail'])&&
+                    (0==$task['is_cancel'])&&
                     ($this->get('model')==$task['model'])
                 ){
                     if(
-                        $this->get('total_count')>$this->progressRead()
+                        $task['total_count']>$task['progress_read']
                         ||
-                        $this->get('total_count')>$this->progressWrite()
+                        $task['total_count']>$task['progress_write']
                     ) {
                         $this->exception('请等待当前任务完成');
+                        return;
                     }
                 }
             }
@@ -202,6 +203,9 @@ class QueueExport{
         //获取域名
         $this->set('http_host',request()->getSchemeAndHttpHost());
 
+        //用于取消任务的地址
+        $this->set('cancel_url',request()->getSchemeAndHttpHost().'/queue-export-cancel?taskId='.$this->taskId);
+
         //把任务保存到缓存
         //设置超时时间
         Cache::put($this->taskId,$this->get(), $this->expire());
@@ -237,7 +241,7 @@ class QueueExport{
         if(is_null($show_name)){
             return Cache::get($this->taskId.'_show_name')??'';
         }
-        return $this->cacheAdd('show_name',$show_name);
+        return $this->cacheAdd('show_name',$show_name,'put');
     }
 
     private function isFail($is_fail=false){
@@ -497,6 +501,8 @@ class QueueExport{
         $this->setDatas($datas);
 
         $file = $this->write(1,1);
+
+        rmdir($this->fileDir());
 
         return $file;
     }
@@ -890,6 +896,8 @@ class QueueExport{
     private function writeAll(){
         $this->write(1,$this->get('batch_count'));
 
+        rmdir($this->fileDir());
+
         if($this->isCompleted()){
             //上传到oss
             $this->upload();
@@ -995,22 +1003,6 @@ class QueueExport{
         Redis::del($this->taskId.'_progress_read');
         Redis::del($this->taskId.'_progress_write');
         Cache::forget($this->filePath(true));
-    }
-
-    /**
-     * 删除所有任务
-     * @return array
-     */
-    public function delAll($cid=''){
-        if(''===$cid) $cid = $this->get('cid');
-        //模糊搜索key
-        $keys = Redis::keys($cid.'QUEUE_EXPORT*');
-        foreach($keys as $key){
-            if(!Redis::exists($key)) continue;
-            if('hash'!=strval(Redis::type($key))) continue;
-            if(empty(Redis::hget($key,'filename'))) continue;
-            Redis::del($key);
-        }
     }
 
     //一个直接导出的方法
