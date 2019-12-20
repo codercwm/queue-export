@@ -731,6 +731,9 @@ class QueueExport{
 
     //获取用点分隔的多维数组的值
     private function getDotValue($item,$field){
+        $arr = explode('??',$field);
+        $field = $arr[0];
+        $default = $arr[1]??$field;
         if('`'==substr($field,0,1)&&'`'==substr($field,-1,1)){
             //如果有``包围的就直接返回
             $value = trim($field,'`');
@@ -740,7 +743,7 @@ class QueueExport{
         $value = $item;
         foreach ($field as $f){
             if(!isset($value[$f])){
-                $value = $f;
+                $value = $default;
                 break;
             }
             $value = $value[$f];
@@ -801,7 +804,8 @@ class QueueExport{
                     }
                     //如果有字典
                     if(!empty($dict_arr)&&isset($dict_arr[$value])){
-                        $value = $dict_arr[$value];
+                        $value = $this->getDotValue($item,$dict_arr[$value]);//$dict_arr[$value];
+//                        $value = $dict_arr[$value];
                     }
                     //如果单元格的值是数组就转成json
                     if(is_array($value)){
@@ -851,14 +855,7 @@ class QueueExport{
         }
 
         //压缩后删除文件夹
-        $handler_del = opendir($dir);
-        while (($file = readdir($handler_del)) !== false) {
-            if ($file != "." && $file != "..") {
-                unlink($dir . "/" . $file);
-            }
-        }
-        @closedir($dir);
-        rmdir($dir);
+        $this->delDir();
     }
 
     private function isCompleted(){
@@ -938,7 +935,7 @@ class QueueExport{
      */
     public function fail($exception){
 
-        if(Cache::has($this->taskId)){
+        if(Cache::has($this->taskId) && ('任务已取消'!=$this->showName())){
             $this->isFail(true);
             $this->showName('任务执行失败');
             //清除数据缓存
@@ -952,6 +949,8 @@ class QueueExport{
     public function cancel(){
         $this->isCancel(true);
         $this->showName('任务已取消');
+        $this->delDir();
+        Cache::forget($this->filePath(true));
         $this->log('任务已取消');
     }
 
@@ -1003,6 +1002,18 @@ class QueueExport{
         Redis::del($this->taskId.'_progress_read');
         Redis::del($this->taskId.'_progress_write');
         Cache::forget($this->filePath(true));
+    }
+
+    private function delDir(){
+        $dir = $this->fileDir();
+        $handler_del = opendir($dir);
+        while (($file = readdir($handler_del)) !== false) {
+            if ($file != "." && $file != "..") {
+                unlink($dir . "/" . $file);
+            }
+        }
+        @closedir($dir);
+        rmdir($dir);
     }
 
     //一个直接导出的方法

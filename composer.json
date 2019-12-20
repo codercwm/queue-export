@@ -2,7 +2,8 @@
     "name": "codercwm/queue-export",
     "require": {
         "phpoffice/phpspreadsheet": "^1.6",
-        "monolog/monolog": "~1.12"
+        "monolog/monolog": "~1.12",
+        "aliyuncs/oss-sdk-php": "^2.3"
     },
     "authors": [
         {
