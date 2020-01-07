@@ -341,6 +341,7 @@ class QueueExport{
             //计算百分比
             $percent = 0;
             if($data['total_count']>0){
+                //如果download_url不为空就说明肯定是100%了
                 if(''==$data['download_url']){
                     $percent = bcmul(
                         ($data['progress_read']+$data['progress_write'])
@@ -353,6 +354,11 @@ class QueueExport{
                 }
             }
             $data['percent'] = $percent.'%';
+
+            Cache::put($key,$data,$this->expire($data['expire_timestamp']));//把任务重新放进缓存中
+            $task_id_arr[] = $key;
+
+            //如果过了10秒钟还未开始读取，而且该任务未取消，未失败，就显示成任务正在排队（只是显示的时候改而已，缓存中的值还是不变的，因为上面已经把它放进缓存了）
             if(
                 (0==$data['is_fail'])&&
                 (0==$data['is_cancel'])&&
@@ -361,18 +367,15 @@ class QueueExport{
             ){
                 $data['show_name'] = '任务正在排队';
             }
-            if(!is_null($this->get('model'))){
-                if($this->get('model')==$data['model']){
-                    $task_list[] = $data;
-                }
-            }else{
+            //如果model为空就全部放进去，如果不为空就放匹配的进去
+            if(is_null($this->get('model')) || ($this->get('model')==$data['model'])){
                 $task_list[] = $data;
             }
-            $task_id_arr[] = $key;
-            Cache::put($key,$data,$this->expire($data['expire_timestamp']));
+
         }
-        //把全部tack_id重新保存进去
+        //把全部tack_id重新保存到缓存
         Cache::forever($cid.'_allTaskId',$task_id_arr);
+        //显示时排序
         array_multisort(array_column($task_list,'timestamp'),SORT_DESC,$task_list);
         return $task_list;
     }
@@ -605,15 +608,11 @@ class QueueExport{
             return false;
         }
 
-        $task_info = $this->get();
         //开始读取之后把show_name改成文件名，因为开始读取前show_name可能是“任务正在排队”
-        if(!isset($task_info['filename'])) {
-            LogService::write(print_r($task_info,true),'asdklfjskladf');
-            LogService::write(print_r($this->taskId,true),'asdklfjskladf111111111111111');
-        }
+        /*$task_info = $this->get();
         if($this->showName()!=$task_info['filename']){
             $this->showName($task_info['filename']);
-        }
+        }*/
 
         $query = $this->buildQuery();
 
