@@ -274,7 +274,7 @@ class QueueExport{
         }
         Redis::incrby($task_id.'_progress_read',$incr);
         if(0==$incr){
-            Redis::expire($task_id.'_progress_read',$this->expire(null,$this->expire()));
+            Redis::expire($task_id.'_progress_read',$this->expire(null,'seconds'));
         }
     }
 
@@ -287,7 +287,7 @@ class QueueExport{
         }
         Redis::incrby($task_id.'_progress_write',$incr);
         if(0==$incr){
-            Redis::expire($task_id.'_progress_write',$this->expire(null,$this->expire()));
+            Redis::expire($task_id.'_progress_write',$this->expire(null,'seconds'));
         }
     }
 
@@ -804,7 +804,6 @@ class QueueExport{
                     //如果有字典
                     if(!empty($dict_arr)&&isset($dict_arr[$value])){
                         $value = $this->getDotValue($item,$dict_arr[$value]);//$dict_arr[$value];
-//                        $value = $dict_arr[$value];
                     }
                     //如果单元格的值是数组就转成json
                     if(is_array($value)){
@@ -815,6 +814,7 @@ class QueueExport{
                         $value = "\t".$value."\t";
                     }
                 }
+                if($value==$field) $value = '';
             }
 
             $data[] = $value;
