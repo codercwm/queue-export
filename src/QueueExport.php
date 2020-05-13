@@ -1005,14 +1005,16 @@ class QueueExport{
 
     private function delDir(){
         $dir = $this->fileDir();
-        $handler_del = opendir($dir);
-        while (($file = readdir($handler_del)) !== false) {
-            if ($file != "." && $file != "..") {
-                unlink($dir . "/" . $file);
+        if(is_dir($dir)){
+            $handler_del = opendir($dir);
+            while (($file = readdir($handler_del)) !== false) {
+                if ($file != "." && $file != "..") {
+                    unlink($dir . "/" . $file);
+                }
             }
+            @closedir($dir);
+            rmdir($dir);
         }
-        @closedir($dir);
-        rmdir($dir);
     }
 
     //一个直接导出的方法

@@ -11,6 +11,10 @@
             "email": "987950059@qq.com"
         }
     ],
+    "autoload": {
+        "psr-4": {
+            "Codercwm\\QueueExport\\": "src/"
+        },
     "extra": {
         "laravel": {
             "providers": [
