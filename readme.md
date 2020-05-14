@@ -1,5 +1,6 @@
 1.安装：
 `composer require "codercwm/queue-export"`
+
 2.控制器中的代码：
 ```php
 namespace App\Http\Controllers\Home;
@@ -64,10 +65,13 @@ class User extends Model implements JWTSubject
 Route::get('test', 'Home\IndexController@test');
 ```
 5.发起请求：
+
 创建导出任务：http://study.test/test?qExCreate=1
+
 查看任务列表：http://study.test/test?qExList=1
 
 **至此一个简单的使用就完成了**
+
 **下面对各个参数或方法做个详细解释**
 
 ```php
@@ -210,3 +214,5 @@ domain表示域名，route表示路由，而重点在于qExCreate参数，传入
   }
 ]
 ```
+
+[![](https://chengweiming.com/wp-content/uploads/2020/05/dd69401721b128fe0bf3b0fc6b010efb.png)](https://chengweiming.com/wp-content/uploads/2020/05/dd69401721b128fe0bf3b0fc6b010efb.png)
