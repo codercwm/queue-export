@@ -337,7 +337,7 @@ class QueueExport{
             $data['complete'] = Cache::get($key.'_complete')??0;
             $data['download_url'] = Cache::get($key.'_download_url')??'';
             $data['local_path'] = Cache::get($key.'_local_path')??'';
-            $data['show_name'] = Cache::get($key.'_show_name')??'';
+            $data['show_name'] = Cache::get($key.'_show_name')??$data['filename'];
             //计算百分比
             $percent = 0;
             if($data['total_count']>0){
@@ -1013,7 +1013,7 @@ class QueueExport{
                 }
             }
             @closedir($dir);
-            rmdir($dir);
+            @rmdir($dir);
         }
     }
 
