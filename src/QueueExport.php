@@ -63,9 +63,9 @@ class QueueExport{
      * @param array $params 筛选条件
      * @param string $method model筛选方法
      */
-    public function setModel(string $model,array $params=[],string $method='qExExport'){
-        if( !empty($params) && !is_null($method) && !method_exists(new $model,$method) ){
-            $this->exception($model.'::'.$method.'方法是必须的',true);
+    public function setModel(string $model,string $method=null,array $params=[]){
+        if( !is_null($method) && !method_exists(new $model,$method) ){
+            $this->exception($model.'中不存在'.$method.'方法，请检查',true);
         }
         $this->set('model',$model);
         $this->set('model_method',$method);
@@ -125,11 +125,13 @@ class QueueExport{
 
     //实例化model
     private function buildQuery(){
-        if(empty($this->get('model_method'))){
-            $query = $this->get('model')::query();
+        $model = $this->get('model')??null;
+        $model_method = $this->get('model_method')??null;
+
+        if($model && $model_method && method_exists(new $model,$model_method)){
+            $query = $model::$model_method($this->get('model_params')??[]);
         }else{
-            $model_method = $this->get('model_method');
-            $query = $this->get('model')::$model_method($this->get('model_params')??[]);
+            $query = $model::query();
         }
 
         return $query;
