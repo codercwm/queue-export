@@ -187,10 +187,10 @@ class QueueExport{
         $query = $this->buildQuery();
 
         //总数量
-        if(isset($instance->count)){
+        if(isset($query->count)){
             $count = $query->count;
         }else{
-            $count = $query->count();
+            $count = $query->paginate()->total();
         }
         $this->set('total_count',$count);
         //总共分了多少批
@@ -328,6 +328,7 @@ class QueueExport{
         $keys = $this->allTaskId($cid);
         $task_list = [];
         $task_id_arr = [];
+        $hidden_keys = $this->config('hidden_keys');
         foreach($keys as $key){
             if(!Cache::has($key)) continue;
             $data = Cache::get($key);
@@ -365,10 +366,19 @@ class QueueExport{
                 (0==$data['is_fail'])&&
                 (0==$data['is_cancel'])&&
                 (0==$data['progress_read'])&&
-                (10<=(time()-$data['timestamp']))
+                (10<=(time()-$data['timestamp']))&&
+                (1>$percent)
             ){
                 $data['show_name'] = '任务正在排队';
             }
+
+            //去掉要隐藏的keys
+            foreach($hidden_keys as $hidden_key){
+                if(isset($data[$hidden_key])){
+                    unset($data[$hidden_key]);
+                }
+            }
+
             //如果model为空就全部放进去，如果不为空就放匹配的进去
             if(is_null($this->get('model')) || ($this->get('model')==$data['model'])){
                 $task_list[] = $data;
@@ -907,21 +917,21 @@ class QueueExport{
         $file_path = $this->filePath();
 
         //上传到oss
-        if($this->get('upload_oss')){
+        if($this->config('upload_oss')){
             //文件名
             $file_name = basename($file_path);
             //文件在oss上的路径
             $oss_path =  'queue_export/'.$file_name;
             //上传文件
-            $oss_client = new OssClient(config('oss.accessKeyId'), config('oss.accessKeySecret'), config('oss.endpoint'));
-            $oss_client->uploadFile(config('oss.bucket'), $oss_path, $file_path);
+            $oss_client = new OssClient($this->config('oss')['accessKeyId'], $this->config('oss')['accessKeySecret'], $this->config('oss')['endpoint']);
+            $oss_client->uploadFile($this->config('oss')['bucket'], $oss_path, $file_path);
             //删除文件
             if($del_local){
                 unlink($file_path);
             }
 
-            $download_url = config('oss.host').'/'.$oss_path;
-            $this->log('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-$this->qExGet('timestamp')));
+            $download_url = $this->config('oss')['host'].'/'.$oss_path;
+            $this->log('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-$this->get('timestamp')));
         }else{
             $this->localPath($file_path);
             $download_url = $this->get('http_host').'/queue-export-download-local'.'?taskId='.$this->get('task_id');
