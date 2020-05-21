@@ -22,7 +22,7 @@ class QueueExport{
         if(empty($this->config)){
             $this->config = $this->get('config')??Config::get('queue_export');
         }
-        
+
         if(is_null($key)){
             return $this->config;
         }
@@ -136,7 +136,7 @@ class QueueExport{
 
         return $query;
     }
-    
+
     /**
      * 开始创建任务
      * @return bool
@@ -195,6 +195,10 @@ class QueueExport{
         $this->set('total_count',$count);
         //总共分了多少批
         $this->set('batch_count',intval(ceil($count/$this->get('batch_size'))));
+
+        //坑：因为数据库会被插入数据，所以读取出来的数量可能会大于一开始时统计的数量
+        //计算最后一批有多少条
+        $this->set('last_batch_size',intval($count%$this->get('batch_size')));
 
         //任务开始的时间戳
         $this->set('timestamp',time());
@@ -350,7 +354,7 @@ class QueueExport{
                         ($data['progress_read']+$data['progress_write'])
                         /
                         ($data['total_count']+$data['total_count'])
-                    ,100,0);
+                        ,100,0);
                     if($percent>98) $percent = 96;
                 }else{
                     $percent = 100;
@@ -559,7 +563,7 @@ class QueueExport{
         $set_data = $spreadsheet->getActiveSheet();
 
         $row = 2;
-
+        $this->log('哪个batch:'.$batch_start.'---'.$batch_end);
         for($b=$batch_start;$b<=$batch_end;$b++){
             $datas = $this->getDatas($b);
 
@@ -639,9 +643,16 @@ class QueueExport{
 
         $datas = [];
 
+        //如果时最后一批的话就获取最后一批的数据，避免数据库不断有数据插入，那么这个队列就停不下来了
+        if($batch_current>=$this->get('batch_count')){
+            $get_size = $this->get('last_batch_size');
+        }else{
+            $get_size = $this->config('batch_size');
+        }
+
         $query
             ->skip(($batch_current-1)*$this->config('batch_size'))
-            ->take($this->config('batch_size'))
+            ->take($get_size)
             ->get()
             ->each(function($item)use(&$datas){
                 $datas[] = $this->getFieldValue($item);
@@ -657,7 +668,7 @@ class QueueExport{
 
         if($this->config('multi_file')){
             $this->writeOne($batch_current);
-        }else{
+        }elseif($this->progressRead()>=$this->get('total_count')){
             $this->writeAll();
         }
     }
@@ -879,13 +890,16 @@ class QueueExport{
     }
 
     private function isCompleted(){
+
+        //坑：因为数据库会被插入数据，所以读取出来的数量可能会大于一开始时统计的数量
+
         //导出的数量不等于总数量，不合并
-        if($this->progressRead()!=$this->get('total_count')){
+        if($this->progressRead()<$this->get('total_count')){
             return false;
         }
 
         //写入文件的行数不等于总数量，不合并
-        if($this->progressWrite()!=$this->get('total_count')){
+        if($this->progressWrite()<$this->get('total_count')){
             return false;
         }
 

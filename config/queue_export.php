@@ -11,6 +11,7 @@ return [
     'hidden_keys' => ['config'],//返回给前端时隐藏哪些信息
     'upload_oss' => false,//是否上传到oss
     'route_prefix' => 'api',//路由前缀
+    'queue_name' => 'CwmExportQueue',
     'oss' => [
         'accessKeyId' => env('ALIYUN_OSS_ID',''),
         'accessKeySecret' => env('ALIYUN_OSS_SECRET',''),
