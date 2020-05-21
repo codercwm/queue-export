@@ -11,7 +11,7 @@ use OSS\OssClient;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use \ZipArchive;
-
+//坑：如果导出过程中数据被删除，那么就完成不了
 class QueueExport{
     private $taskId;//taskId用于在不同的进程中识别同一个任务
     private $datas = [];//数据
@@ -453,7 +453,7 @@ class QueueExport{
         if(isset($query->count)){
             $total_count = $query->count;
         }else{
-            $total_count = $query->count();
+            $total_count = $query->paginate()->total();
         }
 
         $filename = rtrim($task_info['filename'],'/');
@@ -476,10 +476,15 @@ class QueueExport{
         $batch_size = $task_info['batch_size'];
         $batch_count = ceil($total_count/$batch_size);
         for($batch_current=1;$batch_current<=$batch_count;$batch_current++){
-
+            //如果时最后一批的话就获取最后一批的数据，避免数据库不断有数据插入，那么这个队列就停不下来了
+            if($batch_current>=$task_info['batch_count']){
+                $get_size = $task_info['last_batch_size'];
+            }else{
+                $get_size = $batch_size;
+            }
             $items = $query
                 ->skip(($batch_current-1)*$batch_size)
-                ->take($batch_size)
+                ->take($get_size)
                 ->get();
             $rows = [];
 
@@ -563,7 +568,6 @@ class QueueExport{
         $set_data = $spreadsheet->getActiveSheet();
 
         $row = 2;
-        $this->log('哪个batch:'.$batch_start.'---'.$batch_end);
         for($b=$batch_start;$b<=$batch_end;$b++){
             $datas = $this->getDatas($b);
 
@@ -632,12 +636,6 @@ class QueueExport{
         if($this->isFail()||$this->isCancel()){
             return false;
         }
-
-        //开始读取之后把show_name改成文件名，因为开始读取前show_name可能是“任务正在排队”
-        /*$task_info = $this->get();
-        if($this->showName()!=$task_info['filename']){
-            $this->showName($task_info['filename']);
-        }*/
 
         $query = $this->buildQuery();
 
