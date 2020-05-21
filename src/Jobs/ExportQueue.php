@@ -14,7 +14,6 @@ use \Illuminate\Support\Facades\Cache;
 class ExportQueue implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-    const QUEUE_NAME = 'CodercwmExportQueue';
 
     private $qExId,$batchCurrent,$queueExport;
 

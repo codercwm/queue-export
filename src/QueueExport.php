@@ -298,9 +298,9 @@ class QueueExport{
             $expire_timestamp = $this->get('expire_timestamp');
         }
         if('seconds'==$type){
-            return intval(($expire_timestamp-time())/60);
-        }else{
             return intval($expire_timestamp-time());
+        }else{
+            return intval(($expire_timestamp-time())/60);
         }
     }
 
@@ -605,7 +605,7 @@ class QueueExport{
      */
     public function queue(){
         for ($batch_current=1;$batch_current<=$this->get('batch_count');$batch_current++) {
-            ExportQueue::dispatch($this->taskId,$batch_current)->onQueue(ExportQueue::QUEUE_NAME);
+            ExportQueue::dispatch($this->taskId,$batch_current)->onQueue($this->config('queue_name'));
         }
     }
 
