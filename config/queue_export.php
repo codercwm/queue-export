@@ -10,6 +10,7 @@ return [
     'file_size' => 400,//分文件时，一个文件多少条，必须比batch_size大
     'hidden_keys' => ['config'],//返回给前端时隐藏哪些信息
     'upload_oss' => false,//是否上传到oss
+    'route_prefix' => 'api',//路由前缀
     'oss' => [
         'accessKeyId' => env('ALIYUN_OSS_ID',''),
         'accessKeySecret' => env('ALIYUN_OSS_SECRET',''),

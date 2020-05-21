@@ -206,7 +206,7 @@ class QueueExport{
         $this->set('http_host',request()->getSchemeAndHttpHost());
 
         //用于取消任务的地址
-        $this->set('cancel_url',request()->getSchemeAndHttpHost().'/queue-export-cancel?taskId='.$this->taskId);
+        $this->set('cancel_url',request()->getSchemeAndHttpHost().'/'.$this->config('route_prefix').'/queue-export-cancel?taskId='.$this->taskId);
 
         //把任务保存到缓存
         //设置超时时间
@@ -410,13 +410,13 @@ class QueueExport{
                     $this->progressRead($this->get('total_count'));
                     $this->progressWrite($this->get('total_count'));
                     $this->complete(true);
-                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/queue-export-csv'.'?taskId='.$this->get('task_id'));
+                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/'.$this->config('route_prefix').'/queue-export-csv'.'?taskId='.$this->get('task_id'));
                     break;
                 case 'syncXls':
                     $this->progressRead($this->get('total_count'));
                     $this->progressWrite($this->get('total_count'));
                     $this->complete(true);
-                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/queue-export-xls'.'?taskId='.$this->get('task_id'));
+                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/'.$this->config('route_prefix').'/queue-export-xls'.'?taskId='.$this->get('task_id'));
                     break;
                 default:
                     $this->exception('请设置导出类型');
@@ -562,6 +562,15 @@ class QueueExport{
 
         for($b=$batch_start;$b<=$batch_end;$b++){
             $datas = $this->getDatas($b);
+
+            //如果没有获取到数据，就等待
+            //因为如果队列开启了多个进程，执行的顺序是不一定的
+            //有时候会出现已经执行到这里要写入数据了，数据却还没有读取出来的情况
+            while (0==intval(count($datas))){
+                sleep(2);
+                $datas = $this->getDatas($b);
+            }
+
             foreach ($datas as $row_data){
                 $coordinate_i = 0;
                 foreach ($row_data as $value){
@@ -859,7 +868,7 @@ class QueueExport{
                     $zip->addFile($file,basename($file));
                 }
             }
-            $zip->close();
+            @$zip->close();
         }else{//如果只有一个文件，不压缩
             $path = $dir.'.xlsx';
             copy($file_arr[0],$path);
@@ -934,7 +943,7 @@ class QueueExport{
             $this->log('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-$this->get('timestamp')));
         }else{
             $this->localPath($file_path);
-            $download_url = $this->get('http_host').'/queue-export-download-local'.'?taskId='.$this->get('task_id');
+            $download_url = $this->get('http_host').'/'.$this->config('route_prefix').'/queue-export-download-local'.'?taskId='.$this->get('task_id');
         }
 
         $this->downloadUrl($download_url);
