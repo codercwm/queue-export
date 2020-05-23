@@ -2,37 +2,20 @@
 namespace Codercwm\QueueExport;
 
 use Codercwm\QueueExport\Jobs\ExportQueue;
-use Codercwm\QueueExport\Services\LogService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Config as LaravelConfig;
 use Illuminate\Support\Facades\Redis;
 use OSS\OssClient;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use \ZipArchive;
-//坑：如果导出过程中数据被删除，那么就完成不了
+//坑：如果导出过程中数据被删除，那么就完成不了，任务会一直执行下去
 class QueueExport{
-    private $taskId;//taskId用于在不同的进程中识别同一个任务
     private $datas = [];//数据
-    private $taskInfo = [];//任务信息
-    private $config = [];//配置信息
 
-    public function config($key=null,$value=null){
-        if(empty($this->config)){
-            $this->config = $this->get('config')??Config::get('queue_export');
-        }
-
-        if(is_null($key)){
-            return $this->config;
-        }
-
-        if(is_null($value)){
-            return $this->config[$key]??null;
-        }
-
-        $this->config[$key] = $value;
-
+    public function config($key,$value){
+        Config::set($key,$value);
         return $this;
     }
 
@@ -41,20 +24,8 @@ class QueueExport{
      * @param string $cid 每个用户的唯一id，用于获取每个用户的任务列表，一般传入用户cid
      */
     public function setCid(string $cid){
-        $this->set('cid',$cid);
-        $this->taskId = $cid.'QUEUE_EXPORT'.uniqid();
-        return $this;
-    }
-
-    /**
-     * 不同的进程中，设置了task_id，就可以获取一个已存在的任务了，如果没有task_id，将什么都没有
-     * @return mixed
-     */
-    public function setTaskId($task_id=null) {
-        if(is_null($task_id)){
-            $task_id = $this->get('cid').'QUEUE_EXPORT'.uniqid();
-        }
-        $this->taskId = $task_id;
+        Info::set('cid',$cid);
+        Id::set($cid.'QUEUE_EXPORT'.uniqid());
         return $this;
     }
 
@@ -67,9 +38,9 @@ class QueueExport{
         if( !is_null($method) && !method_exists(new $model,$method) ){
             $this->exception($model.'中不存在'.$method.'方法，请检查',true);
         }
-        $this->set('model',$model);
-        $this->set('model_method',$method);
-        $this->set('model_params',$params);
+        Info::set('model',$model);
+        Info::set('model_method',$method);
+        Info::set('model_params',$params);
         return $this;
     }
 
@@ -85,7 +56,7 @@ class QueueExport{
                 $this->exception('已存在重复的文件名',true);
             }
         }
-        $this->set('filename',$filename);
+        Info::set('filename',$filename);
         return $this;
     }
 
@@ -95,8 +66,8 @@ class QueueExport{
      * @param $fields 要获取的字段名，如果是多维，用点“.”隔开
      */
     public function setHeadersFields(array $headers,array $fields){
-        $this->set('headers',$headers);
-        $this->set('fields',$fields);
+        Info::set('headers',$headers);
+        Info::set('fields',$fields);
         return $this;
     }
 
@@ -109,7 +80,7 @@ class QueueExport{
             //一旦报错就从缓存清除这个任务
             $this->del();
         }
-        throw new \Exception($msg);
+        throw new Exception($msg);
     }
 
     /**
@@ -119,22 +90,8 @@ class QueueExport{
      * @param $export_type queue：异步队列，syncXls：同步导出xlsx格式的数据，syncCsv：同步导出csv格式的数据
      */
     public function setExportType($export_type){
-        $this->set('export_type',$export_type);
+        Info::set('export_type',$export_type);
         return $this;
-    }
-
-    //实例化model
-    private function buildQuery(){
-        $model = $this->get('model')??null;
-        $model_method = $this->get('model_method')??null;
-
-        if($model && $model_method && method_exists(new $model,$model_method)){
-            $query = $model::$model_method($this->get('model_params')??[]);
-        }else{
-            $query = $model::query();
-        }
-
-        return $query;
     }
 
     /**
@@ -142,27 +99,28 @@ class QueueExport{
      * @return bool
      */
     public function create() {
-        $config = array_merge(Config::get('queue_export'),$this->config());
-        $this->set('config',$config);
+        $config = array_merge(LaravelConfig::get('queue_export'),Config::get());
+        Info::set('config',$config);
 
         //不是如果是允许的类型
-        if(!in_array($this->get('export_type'),$config['allow_export_type'])){
+        if(!in_array(Info::get('export_type'),$config['allow_export_type'])){
             $this->exception('无效的类型');
         }
 
         if(!$config['multi']){
             //判断是否有未完成的
-            $task_list = $this->allTask($this->get('cid'));
+            $task_list = $this->allTask(Info::get('cid'));
             foreach ($task_list as $task){
                 if(
                     (0==$task['is_fail'])&&
                     (0==$task['is_cancel'])&&
-                    ($this->get('model')==$task['model'])
+                    (Info::get('model')==$task['model'])
                 ){
                     if(
-                        $task['total_count']>$task['progress_read']
+                        /*$task['total_count']>$task['progress_read']
                         ||
-                        $task['total_count']>$task['progress_write']
+                        $task['total_count']>$task['progress_write']*/
+                        $task['percent']!='100%'
                     ) {
                         $this->exception('请等待当前任务完成');
                         return;
@@ -172,49 +130,50 @@ class QueueExport{
         }
 
         //任务id
-        $this->set('task_id',$this->taskId);
+        Info::set('task_id',Id::get());
         //文件（夹）名
-        $this->get('filename') || $this->exception('文件名不能为空',true);
+        Info::get('filename') || $this->exception('文件名不能为空',true);
 
         //excel表头
-        $this->get('headers') || $this->exception('请设置表头',true);
+        Info::get('headers') || $this->exception('请设置表头',true);
         //字段名
-        $this->get('fields') || $this->exception('请设置字段名',true);
+        Info::get('fields') || $this->exception('请设置字段名',true);
 
         //每次条数
-        $this->set('batch_size',$config['batch_size']);
+        Info::set('batch_size',$config['batch_size']);
 
-        $query = $this->buildQuery();
+        //构造查询实例
+        $build = new Build();
 
+        $query = $build->query();
+        
         //总数量
-        if(isset($query->count)){
-            $count = $query->count;
-        }else{
-            $count = $query->paginate()->total();
-        }
-        $this->set('total_count',$count);
+        $count = $build->count();
+
+        Info::set('total_count',$count);
         //总共分了多少批
-        $this->set('batch_count',intval(ceil($count/$this->get('batch_size'))));
+        Info::set('batch_count',intval(ceil($count/Info::get('batch_size'))));
 
         //坑：因为数据库会被插入数据，所以读取出来的数量可能会大于一开始时统计的数量
         //计算最后一批有多少条
-        $this->set('last_batch_size',intval($count%$this->get('batch_size')));
+        $last_batch_size = intval($count%Info::get('batch_size'));
+        Info::set('last_batch_size',$last_batch_size>0?$last_batch_size:Info::get('batch_size'));
 
         //任务开始的时间戳
-        $this->set('timestamp',time());
+        Info::set('timestamp',time());
 
         //任务过期的时间戳
-        $this->set('expire_timestamp',$this->get('timestamp')+$config['expire']);
+        Info::set('expire_timestamp',Info::get('timestamp')+$config['expire']);
 
         //获取域名
-        $this->set('http_host',request()->getSchemeAndHttpHost());
+        Info::set('http_host',request()->getSchemeAndHttpHost());
 
         //用于取消任务的地址
-        $this->set('cancel_url',request()->getSchemeAndHttpHost().'/'.$this->config('route_prefix').'/queue-export-cancel?taskId='.$this->taskId);
+        Info::set('cancel_url',request()->getSchemeAndHttpHost().'/'.Config::get('route_prefix').'/queue-export-cancel?taskId='.Id::get());
 
         //把任务保存到缓存
         //设置超时时间
-        Cache::put($this->taskId,$this->get(), $this->expire());
+        Cache::put(Id::get(),Info::get(), $this->expire());
 
         //保存所有taskId
         $this->allTaskId(null,true);
@@ -226,54 +185,54 @@ class QueueExport{
     }
 
     private function cacheAdd($key,$value,$type='add'){
-        return Cache::$type($this->taskId.'_'.$key,$value,$this->expire());
+        return Cache::$type(Id::get().'_'.$key,$value,$this->expire());
     }
 
     private function downloadUrl($download_url=null){
         if(is_null($download_url)){
-            return Cache::get($this->taskId.'_download_url')??'';
+            return Cache::get(Id::get().'_download_url')??'';
         }
         return $this->cacheAdd('download_url',$download_url);
     }
 
     public function localPath($local_path=null){
         if(is_null($local_path)){
-            return Cache::get($this->taskId.'_local_path')??'';
+            return Cache::get(Id::get().'_local_path')??'';
         }
         return $this->cacheAdd('local_path',$local_path);
     }
 
     private function showName($show_name=null){
         if(is_null($show_name)){
-            return Cache::get($this->taskId.'_show_name')??'';
+            return Cache::get(Id::get().'_show_name')??'';
         }
         return $this->cacheAdd('show_name',$show_name,'put');
     }
 
     private function isFail($is_fail=false){
         if(!$is_fail){
-            return Cache::get($this->taskId.'_is_fail')??0;
+            return Cache::get(Id::get().'_is_fail')??0;
         }
         return $this->cacheAdd('is_fail',1);
     }
 
     private function isCancel($is_cancel=false){
         if(!$is_cancel){
-            return Cache::get($this->taskId.'_is_cancel')??0;
+            return Cache::get(Id::get().'_is_cancel')??0;
         }
         return $this->cacheAdd('is_cancel',1);
     }
 
     private function complete($complete=false){
         if(!$complete){
-            return Cache::get($this->taskId.'_complete')??0;
+            return Cache::get(Id::get().'_complete')??0;
         }
         return $this->cacheAdd('complete',time());
     }
 
     private function progressRead($incr=null,$task_id=null){
         if(is_null($task_id)){
-            $task_id = $this->taskId;
+            $task_id = Id::get();
         }
         if(is_null($incr)){
             return Redis::get($task_id.'_progress_read');
@@ -286,7 +245,7 @@ class QueueExport{
 
     private function progressWrite($incr=null,$task_id=null){
         if(is_null($task_id)){
-            $task_id = $this->taskId;
+            $task_id = Id::get();
         }
         if(is_null($incr)){
             return Redis::get($task_id.'_progress_write');
@@ -299,7 +258,7 @@ class QueueExport{
 
     private function expire($expire_timestamp=null,$type='seconds'){
         if(is_null($expire_timestamp)){
-            $expire_timestamp = $this->get('expire_timestamp');
+            $expire_timestamp = Info::get('expire_timestamp');
         }
         if('seconds'==$type){
             return intval($expire_timestamp-time());
@@ -310,11 +269,11 @@ class QueueExport{
 
     private function allTaskId($cid=null,$refresh=false){
         if(is_null($cid)){
-            $cid = $this->get('cid');
+            $cid = Info::get('cid');
         }
         if($refresh){
             $task_id_arr = $this->allTaskId($cid);
-            array_push($task_id_arr,$this->taskId);
+            array_push($task_id_arr,Id::get());
             Cache::forever($cid.'_allTaskId',$task_id_arr);
             return $task_id_arr;
         }
@@ -326,13 +285,13 @@ class QueueExport{
      * @return array
      */
     public function allTask($cid=''){
-        if(''===$cid) $cid = $this->get('cid');
+        if(''===$cid) $cid = Info::get('cid');
         if(is_null($cid)) return [];
         //获取所有key
         $keys = $this->allTaskId($cid);
         $task_list = [];
         $task_id_arr = [];
-        $hidden_keys = $this->config('hidden_keys');
+        $hidden_keys = Config::get('hidden_keys');
         foreach($keys as $key){
             if(!Cache::has($key)) continue;
             $data = Cache::get($key);
@@ -384,7 +343,7 @@ class QueueExport{
             }
 
             //如果model为空就全部放进去，如果不为空就放匹配的进去
-            if(is_null($this->get('model')) || ($this->get('model')==$data['model'])){
+            if(is_null(Info::get('model')) || (Info::get('model')==$data['model'])){
                 $task_list[] = $data;
             }
 
@@ -406,21 +365,21 @@ class QueueExport{
         //创建任务
         if(!empty($url_params['qExCreate'])){
             $this->create();
-            switch ($this->get('export_type')){
+            switch (Info::get('export_type')){
                 case 'queue':
                     $this->queue();//创建队列任务
                     break;
                 case 'syncCsv':
-                    $this->progressRead($this->get('total_count'));
-                    $this->progressWrite($this->get('total_count'));
+                    $this->progressRead(Info::get('total_count'));
+                    $this->progressWrite(Info::get('total_count'));
                     $this->complete(true);
-                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/'.$this->config('route_prefix').'/queue-export-csv'.'?taskId='.$this->get('task_id'));
+                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/'.Config::get('route_prefix').'/queue-export-csv'.'?taskId='.Info::get('task_id'));
                     break;
                 case 'syncXls':
-                    $this->progressRead($this->get('total_count'));
-                    $this->progressWrite($this->get('total_count'));
+                    $this->progressRead(Info::get('total_count'));
+                    $this->progressWrite(Info::get('total_count'));
                     $this->complete(true);
-                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/'.$this->config('route_prefix').'/queue-export-xls'.'?taskId='.$this->get('task_id'));
+                    $this->downloadUrl(request()->getSchemeAndHttpHost().'/'.Config::get('route_prefix').'/queue-export-xls'.'?taskId='.Info::get('task_id'));
                     break;
                 default:
                     $this->exception('请设置导出类型');
@@ -447,14 +406,15 @@ class QueueExport{
 
         set_time_limit(0);
 
-        $task_info = $this->get();
+        $task_info = Info::get();
 
-        $query = $this->buildQuery();
-        if(isset($query->count)){
-            $total_count = $query->count;
-        }else{
-            $total_count = $query->paginate()->total();
-        }
+        //构造查询实例
+        $build = new Build();
+
+        $query = $build->query();
+
+        //总数量
+        $count = $build->count();
 
         $filename = rtrim($task_info['filename'],'/');
 
@@ -474,7 +434,7 @@ class QueueExport{
         fputcsv($fp, $headers);
 
         $batch_size = $task_info['batch_size'];
-        $batch_count = ceil($total_count/$batch_size);
+        $batch_count = ceil($count/$batch_size);
         for($batch_current=1;$batch_current<=$batch_count;$batch_current++){
             //如果时最后一批的话就获取最后一批的数据，避免数据库不断有数据插入，那么这个队列就停不下来了
             if($batch_current>=$task_info['batch_count']){
@@ -513,7 +473,11 @@ class QueueExport{
 
         set_time_limit(0);
 
-        $query = $this->buildQuery();
+        //构造查询实例
+        $build = new Build();
+
+        $query = $build->query();
+
         $datas = [];
 
         $query
@@ -543,14 +507,14 @@ class QueueExport{
         $coordinate = array_merge($coordinate,$coordinate2);
         $coordinate = array_merge($coordinate,$coordinate3);
 
-        $task_info = $this->get();
+        $task_info = Info::get();
 
         $headers = $task_info['headers'];
 
-        $file = $this->fileDir().$file_suffix.'.'.$this->config('file_ext');
+        $file = $this->fileDir().$file_suffix.'.'.Config::get('file_ext');
 
         if(!is_dir($this->fileDir())){
-            mkdir($this->fileDir());
+            @mkdir($this->fileDir());
         }
 
         $spreadsheet = new Spreadsheet();
@@ -598,7 +562,7 @@ class QueueExport{
         $size2 = memory_get_usage();
         $time2 = time();
 
-        $this->log('占用：'.$this->formatMemorySize($size2-$size1).' 用时：'.($time2-$time1));
+        Log::write('占用：'.Tool::formatMemorySize($size2-$size1).' 用时：'.($time2-$time1));
 
         return $file;
 
@@ -621,8 +585,8 @@ class QueueExport{
      * 执行队列
      */
     public function queue(){
-        for ($batch_current=1;$batch_current<=$this->get('batch_count');$batch_current++) {
-            ExportQueue::dispatch($this->taskId,$batch_current)->onQueue($this->config('queue_name'));
+        for ($batch_current=1;$batch_current<=Info::get('batch_count');$batch_current++) {
+            ExportQueue::dispatch(Id::get(),$batch_current)->onQueue(Config::get('queue_name'));
         }
     }
 
@@ -637,19 +601,22 @@ class QueueExport{
             return false;
         }
 
-        $query = $this->buildQuery();
+        //构造查询实例
+        $build = new Build();
+
+        $query = $build->query();
 
         $datas = [];
 
         //如果时最后一批的话就获取最后一批的数据，避免数据库不断有数据插入，那么这个队列就停不下来了
-        if($batch_current>=$this->get('batch_count')){
-            $get_size = $this->get('last_batch_size');
+        if($batch_current>=Info::get('batch_count')){
+            $get_size = Info::get('last_batch_size');
         }else{
-            $get_size = $this->config('batch_size');
+            $get_size = Config::get('batch_size');
         }
 
         $query
-            ->skip(($batch_current-1)*$this->config('batch_size'))
+            ->skip(($batch_current-1)*Config::get('batch_size'))
             ->take($get_size)
             ->get()
             ->each(function($item)use(&$datas){
@@ -664,9 +631,9 @@ class QueueExport{
     private function appendToCache($datas,$batch_current){
         Cache::put($this->filePath(true).'_'.$batch_current,$datas,$this->expire());
 
-        if($this->config('multi_file')){
+        if(Config::get('multi_file')){
             $this->writeOne($batch_current);
-        }elseif($this->progressRead()>=$this->get('total_count')){
+        }elseif($this->progressRead()>=Info::get('total_count')){
             $this->writeAll();
         }
     }
@@ -676,10 +643,10 @@ class QueueExport{
      */
     private function writeOne($batch_current){
 
-        $tack_info = $this->get();
+        $tack_info = Info::get();
 
         //每n条一个文件，如果数量不够n条而且还没结束导出，就不执行
-        $file_size = $this->config('file_size');
+        $file_size = Config::get('file_size');
 
         //每多少批次获取一次数据
         $get_batch = ceil($file_size/$tack_info['batch_size']);
@@ -704,7 +671,7 @@ class QueueExport{
             $batch_end = $batch_current;
 
             //也就是最后一个文件
-            $file_current = ceil($tack_info['total_count']/$this->config('file_size'));
+            $file_current = ceil($tack_info['total_count']/Config::get('file_size'));
         }else{
             return;
         }
@@ -717,45 +684,6 @@ class QueueExport{
             //上传到oss
             $this->upload();
         }
-    }
-
-    /**
-     * 获取当前任务的信息
-     */
-    public function get($key=null,$refresh=false){
-        if(is_null($key)){
-            if(empty($this->taskInfo) || $refresh){
-                $this->taskInfo = Cache::get($this->taskId)??[];
-            }
-            return $this->taskInfo;
-        }else{
-            if(!isset($this->taskInfo[$key]) || $refresh){
-                $this->taskInfo = array_merge($this->taskInfo,Cache::get($this->taskId)??[]);
-            }
-            return $this->taskInfo[$key]??null;
-        }
-    }
-
-    public function set($key,$value){
-        $this->taskInfo[$key] = $value;
-    }
-
-    /**
-     * 记录日志
-     */
-    public function log($exception){
-        $str = '';
-        if($exception instanceof \Exception){
-            $str = $exception->getMessage().' FILE : '.$exception->getFile().' LINE : '.$exception->getLine();
-        }else{
-            if(is_string($exception)){
-                $str = $exception;
-            }else{
-                $str = $this->enJson($exception);
-            }
-        }
-
-        LogService::write($str,'EXPORT_QUEUE');
     }
 
     //获取用点分隔的多维数组的值
@@ -783,7 +711,7 @@ class QueueExport{
     //获取一行数据
     private function getFieldValue($item){
 
-        $fields = $this->get('fields');
+        $fields = Info::get('fields');
         $data = [];
         foreach ($fields as $field){
             if(''===$field){
@@ -837,7 +765,7 @@ class QueueExport{
                     }
                     //如果单元格的值是数组就转成json
                     if(is_array($value)){
-                        $value = $this->enJson($value);
+                        $value = Tool::enJson($value);
                     }
                     //如果添加制表符，就是转换成字符串，不用科学计数法显示
                     if($tabs || is_object($value)){
@@ -868,7 +796,7 @@ class QueueExport{
 
         //文件大于1个才进行压缩，否则直接改名、移动
         if(1<count($file_arr)){
-            $this->config('file_ext','zip');
+            Config::set('file_ext','zip');
             $path = $dir.'.zip';//压缩完成后文件的绝对路径
 
             $zip = new ZipArchive();
@@ -892,12 +820,12 @@ class QueueExport{
         //坑：因为数据库会被插入数据，所以读取出来的数量可能会大于一开始时统计的数量
 
         //导出的数量不等于总数量，不合并
-        if($this->progressRead()<$this->get('total_count')){
+        if($this->progressRead()<Info::get('total_count')){
             return false;
         }
 
         //写入文件的行数不等于总数量，不合并
-        if($this->progressWrite()<$this->get('total_count')){
+        if($this->progressWrite()<Info::get('total_count')){
             return false;
         }
 
@@ -923,7 +851,7 @@ class QueueExport{
      * 生成excel文件
      */
     private function writeAll(){
-        $this->write(1,$this->get('batch_count'));
+        $this->write(1,Info::get('batch_count'));
 
         rmdir($this->fileDir());
 
@@ -938,24 +866,24 @@ class QueueExport{
         $file_path = $this->filePath();
 
         //上传到oss
-        if($this->config('upload_oss')){
+        if(Config::get('upload_oss')){
             //文件名
             $file_name = basename($file_path);
             //文件在oss上的路径
             $oss_path =  'queue_export/'.$file_name;
             //上传文件
-            $oss_client = new OssClient($this->config('oss')['accessKeyId'], $this->config('oss')['accessKeySecret'], $this->config('oss')['endpoint']);
-            $oss_client->uploadFile($this->config('oss')['bucket'], $oss_path, $file_path);
+            $oss_client = new OssClient(Config::get('oss')['accessKeyId'], Config::get('oss')['accessKeySecret'], Config::get('oss')['endpoint']);
+            $oss_client->uploadFile(Config::get('oss')['bucket'], $oss_path, $file_path);
             //删除文件
             if($del_local){
                 unlink($file_path);
             }
 
-            $download_url = $this->config('oss')['host'].'/'.$oss_path;
-            $this->log('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-$this->get('timestamp')));
+            $download_url = Config::get('oss')['host'].'/'.$oss_path;
+            Log::write('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-Info::get('timestamp')));
         }else{
             $this->localPath($file_path);
-            $download_url = $this->get('http_host').'/'.$this->config('route_prefix').'/queue-export-download-local'.'?taskId='.$this->get('task_id');
+            $download_url = Info::get('http_host').'/'.Config::get('route_prefix').'/queue-export-download-local'.'?taskId='.Info::get('task_id');
         }
 
         $this->downloadUrl($download_url);
@@ -967,13 +895,13 @@ class QueueExport{
      */
     public function fail($exception){
 
-        if(Cache::has($this->taskId) && ('任务已取消'!=$this->showName())){
+        if(Cache::has(Id::get()) && ('任务已取消'!=$this->showName())){
             $this->isFail(true);
             $this->showName('任务执行失败');
             //清除数据缓存
             Cache::forget($this->filePath(true));
         }
-        $this->log($exception);
+        Log::write($exception);
 
     }
 
@@ -983,31 +911,15 @@ class QueueExport{
         $this->showName('任务已取消');
         $this->delDir();
         Cache::forget($this->filePath(true));
-        $this->log('任务已取消');
+        Log::write('任务已取消');
     }
-
-    /**
-     * 格式化内存大小
-     */
-    private function formatMemorySize($size) {
-        $unit = array('b', 'kb', 'mb', 'gb', 'tb', 'pb');
-        return @round($size / pow(1024, ($i = floor(log($size, 1024)))), 2) . ' ' . $unit[$i];
-    }
-
-    public function enJson($data){
-        return json_encode($data,JSON_UNESCAPED_UNICODE);
-    }
-
-    public function deJson($data){
-        return json_decode($data,true);
-    }
-
+    
     /**
      * 获取文件保存目录
      * @return string
      */
     public function fileDir(){
-        $dir = config("filesystems.disks.{$this->config('disk')}.root").'/'.$this->get('filename');
+        $dir = config("filesystems.disks.".Config::get('disk').".root").'/'.Info::get('filename');
         return rtrim($dir,'/');
     }
 
@@ -1016,7 +928,7 @@ class QueueExport{
      * @return string
      */
     public function filePath($md5=false){
-        $path = $this->fileDir().'.'.$this->config('file_ext');
+        $path = $this->fileDir().'.'.Config::get('file_ext');
         if($md5){
             $path = md5($path);
         }
@@ -1024,15 +936,15 @@ class QueueExport{
     }
 
     public function del(){
-        Cache::forget($this->taskId);
-        Cache::forget($this->taskId.'_download_url');
-        Cache::forget($this->taskId.'_local_path');
-        Cache::forget($this->taskId.'_show_name');
-        Cache::forget($this->taskId.'_is_fail');
-        Cache::forget($this->taskId.'_is_cancel');
-        Cache::forget($this->taskId.'_complete');
-        Redis::del($this->taskId.'_progress_read');
-        Redis::del($this->taskId.'_progress_write');
+        Cache::forget(Id::get());
+        Cache::forget(Id::get().'_download_url');
+        Cache::forget(Id::get().'_local_path');
+        Cache::forget(Id::get().'_show_name');
+        Cache::forget(Id::get().'_is_fail');
+        Cache::forget(Id::get().'_is_cancel');
+        Cache::forget(Id::get().'_complete');
+        Redis::del(Id::get().'_progress_read');
+        Redis::del(Id::get().'_progress_write');
         Cache::forget($this->filePath(true));
     }
 
@@ -1064,7 +976,7 @@ class QueueExport{
 
         //下载数据 ↓
 
-        $filename = rtrim($this->get('filename'),'/');
+        $filename = rtrim(Info::get('filename'),'/');
 
         header('Content-Type: application/vnd.ms-excel;charset=utf-8');
         header('Content-Disposition: attachment;filename="' . iconv("UTF-8", "GB2312", $filename) . '.csv"');
@@ -1073,7 +985,7 @@ class QueueExport{
         $fp = fopen('php://output', 'a');
 
         //设置标题
-        $headers = $this->get('headers');
+        $headers = Info::get('headers');
 
         foreach ($headers as $key => $item){
             $headers[$key] = iconv('utf8', 'gbk//IGNORE', $item);
