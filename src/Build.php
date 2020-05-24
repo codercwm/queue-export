@@ -4,7 +4,7 @@ namespace Codercwm\QueueExport;
 
 class Build{
 
-    public $query = null;
+    private $query = null;
     
     public function query(){
         if(is_null($this->query)){

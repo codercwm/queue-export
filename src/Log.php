@@ -17,6 +17,6 @@ class Log{
             }
         }
 
-        LogService::write($str,'EXPORT_QUEUE');
+        LogService::write('['.Info::get('task_id').']'.$str,'EXPORT_QUEUE');
     }
 }
