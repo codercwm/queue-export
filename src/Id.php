@@ -14,12 +14,12 @@ class Id{
 
     //设置任务id
     public static function set(string $taskId){
-        if(!is_null(self::$instance)){
+        /*if(!is_null(self::$instance)){
             $instance = self::$instance;
             if($instance->taskId!=$taskId){
-                throw new Exception('不能够更改taskId');
+                throw new Exception('不能够更改taskId : '.$instance->taskId.'!='.$taskId);
             }
-        }
+        }*/
         //每次设置都认为是一个新请求，重新获取本例化
         $instance = new self();
         $instance->taskId = $taskId;

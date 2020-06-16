@@ -2,7 +2,7 @@
 
 namespace Codercwm\QueueExport;
 
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config as LaravelConfig;
 
 class Config{
 
@@ -15,7 +15,7 @@ class Config{
     private $config = [];
 
     //这个也私有化，为了::get()::set()用法
-    private static function getInstance(array $info=[]){
+    private static function getInstance(){
         if(is_null(self::$instance)){
             self::$instance = new self();
         }
@@ -27,12 +27,12 @@ class Config{
         $instance = self::getInstance();
         if(is_null($key)){
             if(empty($instance->config) || $refresh){
-                $instance->config = Info::get('config')?? \Illuminate\Support\Facades\Config::get('queue_export');
+                $instance->config = Info::get('config')?? LaravelConfig::get('queue_export');
             }
             return $instance->config;
         }else{
             if(!isset($instance->config[$key]) || $refresh){
-                $instance->config = array_merge($instance->config,Info::get('config')?? \Illuminate\Support\Facades\Config::get('queue_export'));
+                $instance->config = array_merge($instance->config,Info::get('config')?? LaravelConfig::get('queue_export'));
             }
             return $instance->config[$key]??null;
         }

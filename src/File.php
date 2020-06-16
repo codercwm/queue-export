@@ -4,6 +4,7 @@ namespace Codercwm\QueueExport;
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use OSS\OssClient;
 
 class File{
     /**
@@ -46,7 +47,7 @@ class File{
         $file = self::dir().$file_suffix.'.'.Config::get('file_ext');
 
         if(!is_dir(self::dir())){
-            @mkdir(self::dir());
+            @mkdir(self::dir(),0777,true);
         }
 
         $spreadsheet = new Spreadsheet();
@@ -98,4 +99,146 @@ class File{
 
         return $file;
     }
+
+    /**
+     * 写入一个文件
+     */
+    public static function writeOne($batch_current){
+
+        $tack_info = Info::get();
+
+        //每n条一个文件，如果数量不够n条而且还没结束导出，就不执行
+        $file_size = Config::get('file_size');
+
+        //每多少批次获取一次数据
+        $get_batch = ceil($file_size/$tack_info['batch_size']);
+        $batch_count = $tack_info['batch_count'];
+        if($get_batch>$batch_count){
+            $get_arr = [0];
+        }else{
+            //这个数组的值就表示了每次要获取的最后一个批次
+            $get_arr = range(0,$batch_count,$get_batch);
+        }
+
+        $batch_end_key = array_search($batch_current,$get_arr);
+        if( (false!==$batch_end_key) && (isset($get_arr[$batch_end_key-1])) ){
+            $batch_start = $get_arr[$batch_end_key-1]+1;
+            $batch_end = $get_arr[$batch_end_key];
+
+            //当前是第几个文件
+            $file_current = ($batch_end/($batch_end-$batch_start+1));
+        }elseif($batch_current==$tack_info['batch_count']){//如果是最后一批
+
+            $batch_start = end($get_arr)+1;
+            $batch_end = $batch_current;
+
+            //也就是最后一个文件
+            $file_current = ceil($tack_info['total_count']/Config::get('file_size'));
+        }else{
+            return;
+        }
+
+        self::write($batch_start,$batch_end,'/'.$tack_info['filename'].'_'.$file_current);
+
+        if(Progress::isCompleted()){
+            self::zip();
+
+            //上传到oss
+            self::upload();
+        }
+    }
+
+    /**
+     * 生成excel文件
+     */
+    public static function writeAll(){
+        self::write(1,Info::get('batch_count'));
+
+        rmdir(self::dir());
+
+        if(Progress::isCompleted()){
+            //上传到oss
+            self::upload();
+        }
+    }
+
+
+    //把文件上传到oss
+    public static function upload($del_local=true){
+        $file_path = self::path();
+
+        //上传到oss
+        if(Config::get('upload_oss')){
+            //文件名
+            $file_name = basename($file_path);
+            //文件在oss上的路径
+            $oss_path =  'queue_export/'.$file_name;
+            //上传文件
+            $oss_client = new OssClient(Config::get('oss')['accessKeyId'], Config::get('oss')['accessKeySecret'], Config::get('oss')['endpoint']);
+            $oss_client->uploadFile(Config::get('oss')['bucket'], $oss_path, $file_path);
+            //删除文件
+            if($del_local){
+                unlink($file_path);
+            }
+
+            $download_url = Config::get('oss')['host'].'/'.$oss_path;
+            Log::write('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-Info::get('timestamp')));
+        }else{
+            Cache::add('local_path',$file_path);
+            $download_url = Info::get('http_host').'/'.Config::get('route_prefix').'/queue-export-download-local'.'?taskId='.Info::get('task_id');
+        }
+
+        Cache::downloadUrl($download_url);
+
+    }
+
+    //压缩
+    public static function zip(){
+
+        $dir = self::dir();
+        //读取文件夹下的全部文件
+        $file_arr = [];
+        $handler = opendir($dir);
+        while (($file = readdir($handler)) !== false) {
+            if ($file != "." && $file != "..") {
+                $file_arr[] = $dir . "/" . $file;
+            }
+        }
+        @closedir($dir);
+
+        //文件大于1个才进行压缩，否则直接改名、移动
+        if(1<count($file_arr)){
+            Config::set('file_ext','zip');
+            $path = $dir.'.zip';//压缩完成后文件的绝对路径
+
+            $zip = new \ZipArchive();
+            if ($zip->open($path, \ZipArchive::OVERWRITE|\ZipArchive::CREATE) === TRUE) {
+                foreach ($file_arr as $file){
+                    $zip->addFile($file,basename($file));
+                }
+            }
+            @$zip->close();
+        }else{//如果只有一个文件，不压缩
+            $path = $dir.'.xlsx';
+            copy($file_arr[0],$path);
+        }
+
+        //压缩后删除文件夹
+        self::delDir();
+    }
+
+    public static function delDir(){
+        $dir = self::dir();
+        if(is_dir($dir)){
+            $handler_del = opendir($dir);
+            while (($file = readdir($handler_del)) !== false) {
+                if ($file != "." && $file != "..") {
+                    unlink($dir . "/" . $file);
+                }
+            }
+            @closedir($dir);
+            @rmdir($dir);
+        }
+    }
+
 }

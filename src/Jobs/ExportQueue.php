@@ -2,9 +2,11 @@
 
 namespace Codercwm\QueueExport\Jobs;
 
+use Codercwm\QueueExport\Data;
 use Codercwm\QueueExport\Exception;
 use Codercwm\QueueExport\Id;
 use Codercwm\QueueExport\Info;
+use Codercwm\QueueExport\Progress;
 use Codercwm\QueueExport\QueueExport;
 use Codercwm\QueueExport\Services\LogService;
 use Illuminate\Bus\Queueable;
@@ -58,9 +60,9 @@ class ExportQueue implements ShouldQueue
         try{
 //            throw new \Exception('手动失败');
             Id::set($this->qExId);
-            $this->queueExport->read($this->batchCurrent);
+            Data::read($this->batchCurrent);
         }catch (Exception $exception){
-            $this->queueExport->fail($exception);
+            Progress::fail($exception);
         }
 
         $expire_timestamp = Info::get('expire_timestamp');
@@ -75,6 +77,6 @@ class ExportQueue implements ShouldQueue
      */
     public function failed(\Exception $exception)
     {
-        $this->queueExport->fail($exception);
+        Progress::fail($exception);
     }
 }
