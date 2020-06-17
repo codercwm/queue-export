@@ -1,12 +1,12 @@
 <?php
 
-use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Config as LaravelConfig;
 use Codercwm\QueueExport\Id;
 use Codercwm\QueueExport\Export\Export;
 use Codercwm\QueueExport\Progress;
 use \Illuminate\Http\Request;
 
-Route::group(['prefix'=>Config::get('queue_export.route_prefix')??'queue-export'],function(){
+Route::group(['prefix'=>LaravelConfig::get('queue_export.route_prefix')??'queue-export'],function(){
 
     Route::get('hello',function(){
         echo 'helll';
@@ -42,5 +42,6 @@ Route::group(['prefix'=>Config::get('queue_export.route_prefix')??'queue-export'
         $params = $request->all();
         Id::set($params['taskId']);
         Progress::cancel();
+        return response('cancel success');
     });
 });

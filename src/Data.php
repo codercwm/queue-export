@@ -21,12 +21,26 @@ class Data{
         return self::$instance;
     }
     //获取信息
-    public static function get($b=null) {
+    public static function get($b) {
         $instance = self::getInstance();
 
         $datas = $instance->datas;
         if(empty($datas)){
-            $datas = LaravelCache::pull(File::path(true).'_'.$b)??[];
+
+            //如果这个批次的数据还未被其它进程取出就取出数据并设置已取出标识
+            if(Cache::add($b.'_data_got',1)){//如果已被其它进程取出，这里是不会设置成功的
+                $datas = LaravelCache::get(File::path(true).'_'.$b)??[];
+
+                //如果队列开启了多个进程，执行的顺序是不一定的
+                //有时候会出现已经执行到这里要写入数据了，数据却还没有读取出来的情况
+                while (empty($datas)){
+                    //等待2秒后进行再次获取
+                    sleep(2);
+                    $datas = LaravelCache::get(File::path(true).'_'.$b)??[];
+                }
+                //取出之后删除
+                LaravelCache::forget(File::path(true).'_'.$b);
+            }
         }
 
         return $datas;
@@ -79,7 +93,7 @@ class Data{
     private static function appendToCache($datas,$batch_current){
         LaravelCache::put(File::path(true).'_'.$batch_current,$datas,Cache::expire());
 
-        if(Config::get('multi_file')){
+        if(Config::get('file_size')){
             File::writeOne($batch_current);
         }elseif(Progress::getRead()>=Info::get('total_count')){
             File::writeAll();

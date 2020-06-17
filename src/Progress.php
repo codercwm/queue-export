@@ -3,19 +3,15 @@
 namespace Codercwm\QueueExport;
 
 use Illuminate\Support\Facades\Cache as LaravelCache;
-use Illuminate\Support\Facades\Redis;
 
 class Progress{
 
     //设置读取进度
-    public static function incrRead($incr,$task_id=null){
-        if(is_null($task_id)){
-            $task_id = Id::get();
-        }
-
-        Redis::incrby($task_id.'_progress_read',$incr);
+    public static function incrRead($incr){
         if(0==$incr){
-            Redis::expire($task_id.'_progress_read',Cache::expire(true));
+            Cache::add('progress_read',0);
+        }else{
+            Cache::increment('progress_read',$incr);
         }
 
         return $incr;
@@ -26,18 +22,15 @@ class Progress{
         if(is_null($task_id)){
             $task_id = Id::get();
         }
-        return Redis::get($task_id.'_progress_read');
+        return LaravelCache::get($task_id.'_progress_read');
     }
 
     //设置写入进度
-    public static function incrWrite($incr,$task_id=null){
-        if(is_null($task_id)){
-            $task_id = Id::get();
-        }
-
-        Redis::incrby($task_id.'_progress_write',$incr);
+    public static function incrWrite($incr){
         if(0==$incr){
-            Redis::expire($task_id.'_progress_write',Cache::expire(true));
+            Cache::add('progress_write',0);
+        }else{
+            Cache::increment('progress_write',$incr);
         }
 
         return $incr;
@@ -48,7 +41,7 @@ class Progress{
         if(is_null($task_id)){
             $task_id = Id::get();
         }
-        return Redis::get($task_id.'_progress_write');
+        return LaravelCache::get($task_id.'_progress_read');
     }
 
     /*
@@ -108,4 +101,5 @@ class Progress{
         }
         Log::write($exception);
     }
+
 }

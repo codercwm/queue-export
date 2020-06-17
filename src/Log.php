@@ -7,7 +7,7 @@ use Codercwm\QueueExport\Services\LogService;
 class Log{
     public static function write($exception){
         $str = '';
-        if($exception instanceof Exception){
+        if($exception instanceof \Exception){
             $str = $exception->getMessage().' FILE : '.$exception->getFile().' LINE : '.$exception->getLine();
         }else{
             if(is_string($exception)){

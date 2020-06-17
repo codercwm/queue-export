@@ -42,7 +42,9 @@ class Xls{
 
         $file = File::write(1,1);
 
-        rmdir(File::dir());
+        if($file){
+            rmdir(File::dir());
+        }
 
         return $file;
     }

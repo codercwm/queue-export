@@ -63,4 +63,8 @@ class Cache{
             return intval(($expire_timestamp-time())/60);
         }
     }
+
+    public static function increment($key,$incr=1){
+        LaravelCache::increment(Id::get().'_'.$key,$incr);
+    }
 }

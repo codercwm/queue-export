@@ -29,6 +29,12 @@ class File{
     }
 
     public static function write($batch_start,$batch_end,$file_suffix=''){
+
+        //判断并设置当前文件是否已写入或正在写入，如果已写入就不能再次写入
+        if(!Cache::add($batch_start.'_file_writed',1)){
+            return false;
+        }
+
         ini_set('memory_limit','1024M');
 
         $size1 = memory_get_usage();
@@ -43,12 +49,6 @@ class File{
         $task_info = Info::get();
 
         $headers = $task_info['headers'];
-
-        $file = self::dir().$file_suffix.'.'.Config::get('file_ext');
-
-        if(!is_dir(self::dir())){
-            @mkdir(self::dir(),0777,true);
-        }
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->setActiveSheetIndex(0);
@@ -68,14 +68,6 @@ class File{
         for($b=$batch_start;$b<=$batch_end;$b++){
             $datas = Data::get($b);
 
-            //如果没有获取到数据，就等待
-            //因为如果队列开启了多个进程，执行的顺序是不一定的
-            //有时候会出现已经执行到这里要写入数据了，数据却还没有读取出来的情况
-            while (0==intval(count($datas))){
-                sleep(2);
-                $datas = Data::get($b);
-            }
-
             foreach ($datas as $row_data){
                 $coordinate_i = 0;
                 foreach ($row_data as $value){
@@ -88,8 +80,19 @@ class File{
             unset($datas);
         }
 
-        $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
 
+        $file = self::dir().$file_suffix.'.'.Config::get('file_ext');
+
+        //如果文件已存在就不再写入
+        if(file_exists($file)){
+            return false;
+        }
+
+        if(!is_dir(self::dir())){
+            @mkdir(self::dir(),0777,true);
+        }
+
+        $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
         $writer->save($file);
 
         $size2 = memory_get_usage();
@@ -152,13 +155,15 @@ class File{
      * 生成excel文件
      */
     public static function writeAll(){
-        self::write(1,Info::get('batch_count'));
+        $res = self::write(1,Info::get('batch_count'));
 
-        rmdir(self::dir());
+        if($res){
+            rmdir(self::dir());
 
-        if(Progress::isCompleted()){
-            //上传到oss
-            self::upload();
+            if(Progress::isCompleted()){
+                //上传到oss
+                self::upload();
+            }
         }
     }
 
@@ -233,7 +238,11 @@ class File{
             $handler_del = opendir($dir);
             while (($file = readdir($handler_del)) !== false) {
                 if ($file != "." && $file != "..") {
-                    unlink($dir . "/" . $file);
+                    if(file_exists($dir . "/" . $file)){
+                        unlink($dir . "/" . $file);
+                    }/*else{
+                        Log::write($dir . "/" . $file);
+                    }*/
                 }
             }
             @closedir($dir);

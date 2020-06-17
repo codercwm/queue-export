@@ -4,8 +4,6 @@ namespace Codercwm\QueueExport;
 
 use Exception as RootException;
 use Illuminate\Support\Facades\Cache as LaravelCache;
-use Illuminate\Support\Facades\Redis;
-use Throwable;
 
 class Exception extends RootException{
 
@@ -27,8 +25,8 @@ class Exception extends RootException{
         LaravelCache::forget(Id::get().'_is_fail');
         LaravelCache::forget(Id::get().'_is_cancel');
         LaravelCache::forget(Id::get().'_complete');
-        Redis::del(Id::get().'_progress_read');
-        Redis::del(Id::get().'_progress_write');
-        LaravelCache::forget($this->filePath(true));
+        LaravelCache::forget(Id::get().'_progress_read');
+        LaravelCache::forget(Id::get().'_progress_write');
+        LaravelCache::forget(File::path(true));
     }
 }

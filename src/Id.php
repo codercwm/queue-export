@@ -2,6 +2,8 @@
 
 namespace Codercwm\QueueExport;
 
+use Illuminate\Support\Facades\Config as LaravelConfig;
+
 class Id{
 
     private function __construct() { }
@@ -13,13 +15,17 @@ class Id{
     private $taskId = null;
 
     //设置任务id
+    //这里是一个新线程的开始
     public static function set(string $taskId){
-        /*if(!is_null(self::$instance)){
-            $instance = self::$instance;
-            if($instance->taskId!=$taskId){
-                throw new Exception('不能够更改taskId : '.$instance->taskId.'!='.$taskId);
-            }
-        }*/
+        $cache_driver = Config::get('cache_driver');
+        if('default'!=$cache_driver){
+            LaravelConfig::set('cache.default',$cache_driver);
+        }
+
+        if(!in_array(LaravelConfig::get('cache.stores')[$cache_driver]['driver'],['redis','memcached'])){
+            throw new Exception('必须要使用 redis 或 memcached',true);
+        }
+
         //每次设置都认为是一个新请求，重新获取本例化
         $instance = new self();
         $instance->taskId = $taskId;
