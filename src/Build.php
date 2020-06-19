@@ -5,7 +5,7 @@ namespace Codercwm\QueueExport;
 class Build{
 
     private $query = null;
-    
+
     public function query(){
         if(is_null($this->query)){
             $model = Info::get('model')??null;
@@ -22,10 +22,10 @@ class Build{
     }
 
     public function count(){
-        if(isset($this->query->count)){
-            $count = $this->query->count;
+        if(isset($this->query()->count)){
+            $count = $this->query()->count;
         }else{
-            $count = $this->query->paginate()->total();
+            $count = $this->query()->paginate()->total();
         }
         return $count;
     }

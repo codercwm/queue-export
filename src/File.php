@@ -2,6 +2,8 @@
 
 namespace Codercwm\QueueExport;
 
+use Carbon\Carbon;
+use Codercwm\QueueExport\Jobs\ExportQueue;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use OSS\OssClient;
@@ -222,7 +224,7 @@ class File{
                     $zip->addFile($file,basename($file));
                 }
             }
-            @$zip->close();
+            $zip->close();
         }else{//如果只有一个文件，不压缩
             $path = $dir.'.xlsx';
             copy($file_arr[0],$path);
@@ -233,21 +235,11 @@ class File{
     }
 
     public static function delDir(){
-        $dir = self::dir();
-        if(is_dir($dir)){
-            $handler_del = opendir($dir);
-            while (($file = readdir($handler_del)) !== false) {
-                if ($file != "." && $file != "..") {
-                    if(file_exists($dir . "/" . $file)){
-                        unlink($dir . "/" . $file);
-                    }/*else{
-                        Log::write($dir . "/" . $file);
-                    }*/
-                }
-            }
-            @closedir($dir);
-            @rmdir($dir);
-        }
+        //使用延迟的方式删除文件
+        ExportQueue::dispatch('delDir',Id::get())
+            ->onQueue(Config::get('queue_name'))
+            ->delay(Carbon::now()->addSeconds(30));;
+
     }
 
 }

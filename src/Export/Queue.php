@@ -11,7 +11,7 @@ use Codercwm\QueueExport\Info;
 class Queue{
     public function creation(){
         for ($batch_current=1;$batch_current<=Info::get('batch_count');$batch_current++) {
-            ExportQueue::dispatch(Id::get(),$batch_current)->onQueue(Config::get('queue_name'));
+            ExportQueue::dispatch('readData',Id::get(),$batch_current)->onQueue(Config::get('queue_name'));
         }
     }
 

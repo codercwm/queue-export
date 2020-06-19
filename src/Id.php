@@ -20,9 +20,13 @@ class Id{
         $cache_driver = Config::get('cache_driver');
         if('default'!=$cache_driver){
             LaravelConfig::set('cache.default',$cache_driver);
+            $current_cache_driver = LaravelConfig::get('cache.stores')[$cache_driver]['driver'];
+        }else{
+            $current_cache_driver = LaravelConfig::get('cache.stores')[LaravelConfig::get('cache.default')]['driver'];
+
         }
 
-        if(!in_array(LaravelConfig::get('cache.stores')[$cache_driver]['driver'],['redis','memcached'])){
+        if(!in_array($current_cache_driver,['redis','memcached'])){
             throw new Exception('必须要使用 redis 或 memcached',true);
         }
 

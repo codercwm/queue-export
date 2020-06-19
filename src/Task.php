@@ -3,6 +3,7 @@
 namespace Codercwm\QueueExport;
 
 use Illuminate\Support\Facades\Cache as LaravelCache;
+use Illuminate\Support\Facades\Config as LaravelConfig;
 
 class Task{
 
