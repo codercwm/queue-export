@@ -72,6 +72,12 @@ class Export{
     }
 
     private function create(){
+        //构造查询实例
+        $build = new Build();
+
+        //总数量
+        $count = $build->count();
+
         $config = array_merge(LaravelConfig::get('queue_export'),Config::get());
 
         Info::set('config',$config);
@@ -88,14 +94,6 @@ class Export{
 
         //每次条数
         Info::set('batch_size',$config['batch_size']);
-
-        //构造查询实例
-        $build = new Build();
-
-        $query = $build->query();
-
-        //总数量
-        $count = $build->count();
 
         Info::set('total_count',$count);
         //总共分了多少批
@@ -120,7 +118,7 @@ class Export{
 
         //把任务保存到缓存
         //设置超时时间
-        LaravelCache::put(Id::get(),Info::get(), Cache::expire());
+        LaravelCache::put(Info::get('task_id'),Info::get(), Cache::expire());
 
         //保存所有taskId
         Task::ids(null,true);

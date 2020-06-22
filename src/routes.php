@@ -41,7 +41,7 @@ Route::group(['prefix'=>LaravelConfig::get('queue_export.route_prefix')??'queue-
     Route::get('queue-export-cancel',function(Request $request){
         $params = $request->all();
         Id::set($params['taskId']);
-        Progress::cancel();
+        Progress::cancel(true);
         return response('cancel success');
     });
 });

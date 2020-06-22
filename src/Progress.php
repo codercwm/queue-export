@@ -80,13 +80,29 @@ class Progress{
     }
 
     //取消任务
-    public static function cancel(){
+    public static function cancel($del=false){
         Cache::isCancel(true);
         Cache::showName('任务已取消');
         File::delDir();
         LaravelCache::forget(File::path(true));
         Log::write('任务已取消');
+        if($del){
+            self::del();
+        }
+    }
+
+    //删除任务
+    public static function del(){
         LaravelCache::forget(Id::get());
+        LaravelCache::forget(Id::get().'_download_url');
+        LaravelCache::forget(Id::get().'_local_path');
+        LaravelCache::forget(Id::get().'_show_name');
+        LaravelCache::forget(Id::get().'_is_fail');
+        LaravelCache::forget(Id::get().'_is_cancel');
+        LaravelCache::forget(Id::get().'_complete');
+        LaravelCache::forget(Id::get().'_progress_read');
+        LaravelCache::forget(Id::get().'_progress_write');
+        LaravelCache::forget(File::path(true));
     }
 
     /**

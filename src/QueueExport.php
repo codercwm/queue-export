@@ -23,7 +23,9 @@ class QueueExport{
      */
     public function setCid(string $cid){
         Info::set('cid',$cid);
-        Id::set($cid.'QUEUE_EXPORT'.uniqid());
+        if(!empty($this->urlParams['qExCreate'])) {
+            Id::set($cid . 'QUEUE_EXPORT' . uniqid());
+        }
         return $this;
     }
 
@@ -32,13 +34,14 @@ class QueueExport{
      * @param array $params 筛选条件
      * @param string $method model筛选方法
      */
-    public function setModel(string $model,string $method=null,array $params=[]){
+    public function setModel(string $model,string $method=null,array $params=[],$count_method=null){
         if( !is_null($method) && !method_exists(new $model,$method) ){
             throw new Exception($model.'中不存在'.$method.'方法，请检查',true);
         }
         Info::set('model',$model);
         Info::set('model_method',$method);
         Info::set('model_params',$params);
+        Info::set('count_method',$count_method);
         return $this;
     }
 
@@ -67,8 +70,10 @@ class QueueExport{
      * @param $fields 要获取的字段名，如果是多维，用点“.”隔开
      */
     public function setHeadersFields(array $headers,array $fields){
-        Info::set('headers',$headers);
-        Info::set('fields',$fields);
+        if(!empty($this->urlParams['qExCreate'])) {
+            Info::set('headers', $headers);
+            Info::set('fields', $fields);
+        }
         return $this;
     }
 
@@ -79,7 +84,9 @@ class QueueExport{
      * @param $export_type queue：异步队列，syncXls：同步导出xlsx格式的数据，syncCsv：同步导出csv格式的数据
      */
     public function setExportType($export_type){
-        Info::set('export_type',$export_type);
+        if(!empty($this->urlParams['qExCreate'])) {
+            Info::set('export_type', $export_type);
+        }
         return $this;
     }
 
