@@ -85,7 +85,6 @@ class Progress{
         Cache::showName('任务已取消');
         File::delDir();
         LaravelCache::forget(File::path(true));
-        Log::write('任务已取消');
         if($del){
             self::del();
         }

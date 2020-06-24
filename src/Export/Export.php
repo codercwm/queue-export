@@ -53,7 +53,7 @@ class Export{
 
         if(!Config::get('multi')){
             //判断是否有未完成的
-            $task_list = Task::all(Info::get('cid'));
+            $task_list = Task::all(Id::cid());
             foreach ($task_list as $task){
                 if(
                     (0==$task['is_fail'])&&
@@ -118,10 +118,11 @@ class Export{
 
         //把任务保存到缓存
         //设置超时时间
-        LaravelCache::put(Info::get('task_id'),Info::get(), Cache::expire());
+        $task_infos = Info::get();
+        LaravelCache::put($task_infos['task_id'],$task_infos, Cache::expire());
 
         //保存所有taskId
-        Task::ids(null,true);
+        Task::ids(null,$task_infos['task_id']);
 
         Progress::incrRead(0);
         Progress::incrWrite(0);

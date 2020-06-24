@@ -5,26 +5,18 @@ namespace Codercwm\QueueExport;
 use Illuminate\Support\Facades\Cache as LaravelCache;
 
 class Data{
-    private $datas = [];
-    private static $instance = null;
+
 
     private function __construct() { }
 
     private function __clone() { }
 
+    private static $datas = [];
 
-    //这个也私有化，为了::get()::set()用法
-    private static function getInstance(array $info=[]){
-        if(is_null(self::$instance)){
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
     //获取信息
     public static function get($b) {
-        $instance = self::getInstance();
 
-        $datas = $instance->datas;
+        $datas = self::$datas[Id::get()]??[];
         if(empty($datas)){
 
             //如果这个批次的数据还未被其它进程取出就取出数据并设置已取出标识
@@ -47,10 +39,9 @@ class Data{
     }
 
     public static function set($datas){
-        $instance = self::getInstance();
-
-        $instance->datas = $datas;
+        self::$datas[Id::get()] = $datas;
     }
+
 
     /**
      * 从数据库中读取数据
@@ -59,7 +50,7 @@ class Data{
     public static function read($batch_current){
 
         //如果任务已经失败或已取消，就不再往下执行了
-        if(Cache::isFail()||Cache::isCancel()){
+        if( Cache::isFail() || Cache::isCancel() || !LaravelCache::has(Id::get())){
             return false;
         }
 
@@ -93,7 +84,7 @@ class Data{
     private static function appendToCache($datas,$batch_current){
         LaravelCache::put(File::path(true).'_'.$batch_current,$datas,Cache::expire());
 
-        if(Config::get('file_size')){
+        if(0<Config::get('file_size')){
             File::writeOne($batch_current);
         }elseif(Progress::getRead()>=Info::get('total_count')){
             File::writeAll();

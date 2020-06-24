@@ -2,7 +2,7 @@
 
 namespace Codercwm\QueueExport;
 
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Cache as LaravelCache;
 
 class Info{
 
@@ -10,37 +10,23 @@ class Info{
 
     private function __clone() { }
 
-    private static $instance = null;
+    private static $info = [];
 
-    private $info = [];
-
-    //这个也私有化，为了Info::get()用法
-    private static function getInstance(array $info=[]){
-        if(is_null(self::$instance)){
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
-
-    //获取信息
     public static function get($key=null,$refresh=false){
-        $instance = self::getInstance();
         if(is_null($key)){
-            if(empty($instance->info) || $refresh){
-                $instance->info = Cache::get(Id::get())??[];
+            if(empty(self::$info[Id::get()]) || $refresh){
+                self::$info[Id::get()] = LaravelCache::get(Id::get())??[];
             }
-            return $instance->info;
+            return self::$info[Id::get()];
         }else{
-            if(!isset($instance->info[$key]) || $refresh){
-                $instance->info = array_merge($instance->info,Cache::get(Id::get())??[]);
+            if(!isset(self::$info[Id::get()][$key]) || $refresh){
+                self::$info[Id::get()] = array_merge(self::$info[Id::get()]??[],LaravelCache::get(Id::get())??[]);
             }
-            return $instance->info[$key]??null;
+            return self::$info[Id::get()][$key]??null;
         }
     }
 
-    //更改信息
     public static function set($key,$value){
-        $instance = self::getInstance();
-        $instance->info[$key] = $value;
+        self::$info[Id::get()][$key] = $value;
     }
 }

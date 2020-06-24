@@ -22,10 +22,8 @@ class QueueExport{
      * @param string $cid 每个用户的唯一id，用于获取每个用户的任务列表，一般传入用户cid
      */
     public function setCid(string $cid){
-        Info::set('cid',$cid);
-        if(!empty($this->urlParams['qExCreate'])) {
-            Id::set($cid . 'QUEUE_EXPORT' . uniqid());
-        }
+        Id::cid($cid);
+        Id::set($cid . 'QUEUE_EXPORT' . uniqid());
         return $this;
     }
 
@@ -42,6 +40,14 @@ class QueueExport{
         Info::set('model_method',$method);
         Info::set('model_params',$params);
         Info::set('count_method',$count_method);
+
+        if(method_exists(new $model,'headers')){
+            Info::set('headers', $model::headers());
+        }
+        if(method_exists(new $model,'fields')){
+            Info::set('fields', $model::fields());
+        }
+
         return $this;
     }
 

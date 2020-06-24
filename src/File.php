@@ -192,7 +192,7 @@ class File{
             Log::write('OSS文件上传成功: [' . $download_url . "] 总用时：".(time()-Info::get('timestamp')));
         }else{
             Cache::add('local_path',$file_path);
-            $download_url = Info::get('http_host').'/'.Config::get('route_prefix').'/queue-export-download-local'.'?taskId='.Info::get('task_id');
+            $download_url = Info::get('http_host').'/'.Config::get('route_prefix').'/queue-export-download-local'.'?taskId='.Id::get();
         }
 
         Cache::downloadUrl($download_url);

@@ -16,7 +16,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use \Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Cache as LaravelCache;
 
 class ExportQueue implements ShouldQueue
 {
@@ -46,8 +46,11 @@ class ExportQueue implements ShouldQueue
 
     public function __construct($action,$q_ex_id,$batch_current=null)
     {
+        if(empty($q_ex_id) || !LaravelCache::has($q_ex_id)){
+            throw new Exception('$q_ex_id错误');
+        }
         if( ('readData'==$action) && (is_null($batch_current)) ){
-            throw new \Exception('读取数据时batch_current参数是必须的');
+            throw new Exception('读取数据时batch_current参数是必须的');
         }
         set_time_limit(0);
         $this->action = $action;
@@ -67,15 +70,15 @@ class ExportQueue implements ShouldQueue
 
     private function readData(){
         try{
-            //            throw new \Exception('手动失败');
+            //throw new \Exception('手动失败');
             Id::set($this->qExId);
             Data::read($this->batchCurrent);
         }catch (Exception $exception){
             Progress::fail($exception);
         }
 
-        $expire_timestamp = Info::get('expire_timestamp');
-        Cache::put($this->qExId,Info::get(), ($expire_timestamp-time())/60);
+        //$expire_timestamp = Info::get('expire_timestamp');
+        //LaravelCache::put($this->qExId,Info::get(), ($expire_timestamp-time())/60);
     }
 
     private function delDir(){
@@ -86,14 +89,14 @@ class ExportQueue implements ShouldQueue
             while (($file = readdir($handler_del)) !== false) {
                 if ($file != "." && $file != "..") {
                     $try_del = 0;
-                    //文件在压缩的时候，系统会给它加上一个随机的前缀，有时候导致这里删除时找不到文件
+                    //文件在压缩的时候，系统会给它加上一个随机的后缀，有时候导致这里删除时找不到文件
                     //把它奇怪的后缀去掉
                     $del_file = $dir . "/" . $file;
                     if(!file_exists($del_file)){
                         $del_file = rtrim($dir . "/" . $file,'.'.substr(strrchr($file, '.'), 1));
                     }
                     while (true){
-                        if(file_exists($del_file)){
+                        if(is_file($del_file)){
                             //删除文件
                             unlink($del_file);
                             break;

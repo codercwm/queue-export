@@ -8,17 +8,18 @@ use Illuminate\Support\Facades\Config as LaravelConfig;
 class Task{
 
     public static function all($cid=''){
-        if(''===$cid) $cid = Info::get('cid');
+        if(''===$cid) $cid = Id::cid();
         if(is_null($cid)) return [];
         //获取所有key
         $keys = self::ids($cid);
         $task_list = [];
         $task_id_arr = [];
-        $hidden_keys = Config::get('hidden_keys');
+        $hidden_keys = LaravelConfig::get('queue_export')['hidden_keys'];
         foreach($keys as $key){
             if(!LaravelCache::has($key)) continue;
             $data = LaravelCache::get($key);
             if(empty($data['filename'])) continue;
+            $key = $data['task_id'];
             $data['progress_read'] = Progress::getRead($key);
             $data['progress_write'] = Progress::getWrite($key);
             $data['is_fail'] = LaravelCache::get($key.'_is_fail')??0;
@@ -72,20 +73,20 @@ class Task{
 
         }
         //把全部tack_id重新保存到缓存
-        LaravelCache::forever($cid.'_allTaskId',$task_id_arr);
+        LaravelCache::forever($cid.'_allTaskId',array_unique($task_id_arr));
         //显示时排序
         array_multisort(array_column($task_list,'timestamp'),SORT_DESC,$task_list);
         return $task_list;
     }
 
-    public static function ids($cid='',$refresh=false){
+    public static function ids($cid='',$push=null){
         if(is_null($cid)){
-            $cid = Info::get('cid');
+            $cid = Id::cid();
         }
-        if($refresh){
-            $task_id_arr = self::ids($cid);
-            array_push($task_id_arr,Id::get());
-            LaravelCache::forever($cid.'_allTaskId',$task_id_arr);
+        if($push){
+            $task_id_arr = LaravelCache::get($cid.'_allTaskId')??[];
+            array_push($task_id_arr,$push);
+            LaravelCache::forever($cid.'_allTaskId',array_filter(array_unique($task_id_arr)));
             return $task_id_arr;
         }
         return LaravelCache::get($cid.'_allTaskId')??[];
