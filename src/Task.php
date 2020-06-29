@@ -4,6 +4,7 @@ namespace Codercwm\QueueExport;
 
 use Illuminate\Support\Facades\Cache as LaravelCache;
 use Illuminate\Support\Facades\Config as LaravelConfig;
+use Codercwm\QueueExport\CourseContent\Info;
 
 class Task{
 
@@ -22,6 +23,7 @@ class Task{
             $key = $data['task_id'];
             $data['progress_read'] = Progress::getRead($key);
             $data['progress_write'] = Progress::getWrite($key);
+            $data['progress_merge'] = Progress::getMerge($key);
             $data['is_fail'] = LaravelCache::get($key.'_is_fail')??0;
             $data['is_cancel'] = LaravelCache::get($key.'_is_cancel')??0;
             $data['complete'] = LaravelCache::get($key.'_complete')??0;
@@ -34,9 +36,9 @@ class Task{
                 //如果download_url不为空就说明肯定是100%了
                 if(''==$data['download_url']){
                     $percent = bcmul(
-                        ($data['progress_read']+$data['progress_write'])
+                        ($data['progress_read']+$data['progress_write']+$data['progress_merge'])
                         /
-                        ($data['total_count']+$data['total_count'])
+                        ($data['total_count']+$data['total_count']+$data['total_count'])
                         ,100,0);
                     if($percent>98) $percent = 96;
                 }else{

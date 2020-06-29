@@ -4,10 +4,10 @@ namespace Codercwm\QueueExport\Export;
 
 use Codercwm\QueueExport\Build;
 use Codercwm\QueueExport\Cache;
-use Codercwm\QueueExport\Config;
+use Codercwm\QueueExport\CourseContent\Config;
 use Codercwm\QueueExport\Exception;
 use Codercwm\QueueExport\Id;
-use Codercwm\QueueExport\Info;
+use Codercwm\QueueExport\CourseContent\Info;
 use Codercwm\QueueExport\Progress;
 use Codercwm\QueueExport\Task;
 use Illuminate\Support\Facades\Cache as LaravelCache;
@@ -126,6 +126,7 @@ class Export{
 
         Progress::incrRead(0);
         Progress::incrWrite(0);
+        Progress::incrMerge(0);
 
         return true;
     }

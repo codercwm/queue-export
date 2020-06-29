@@ -3,6 +3,8 @@ namespace Codercwm\QueueExport;
 
 use Codercwm\QueueExport\Export\Export;
 use Illuminate\Support\Collection;
+use Codercwm\QueueExport\CourseContent\Config;
+use Codercwm\QueueExport\CourseContent\Info;
 
 //坑：如果导出过程中数据被删除，那么就完成不了，任务会一直执行下去
 class QueueExport{

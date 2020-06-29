@@ -3,6 +3,7 @@
 namespace Codercwm\QueueExport;
 
 use Illuminate\Support\Facades\Cache as LaravelCache;
+use Codercwm\QueueExport\CourseContent\Info;
 
 class Cache{
     

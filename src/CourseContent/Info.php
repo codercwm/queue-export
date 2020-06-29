@@ -1,10 +1,12 @@
 <?php
 
-namespace Codercwm\QueueExport;
+namespace Codercwm\QueueExport\CourseContent;
 
+
+use Codercwm\QueueExport\Id;
 use Illuminate\Support\Facades\Cache as LaravelCache;
 
-class Info{
+class Info implements CourseContent {
 
     private function __construct() { }
 
@@ -28,5 +30,12 @@ class Info{
 
     public static function set($key,$value){
         self::$info[Id::get()][$key] = $value;
+    }
+
+    public static function destroy(){
+        if(isset(self::$info[Id::get()])){
+            self::$info[Id::get()] = null;
+            unset(self::$info[Id::get()]);
+        }
     }
 }

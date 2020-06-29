@@ -1,6 +1,7 @@
 <?php
 
 namespace Codercwm\QueueExport;
+use Codercwm\QueueExport\CourseContent\Info;
 
 class FieldValue{
     public static function get($item){
@@ -65,7 +66,9 @@ class FieldValue{
                         $value = "\t".$value."\t";
                     }
                 }
-                if($value==$field) $value = '';
+                if(trim($value,"\t")==$field){
+                    $value = '';
+                }
             }
 
             $data[] = $value;

@@ -2,14 +2,13 @@
 
 namespace Codercwm\QueueExport\Jobs;
 
-use Codercwm\QueueExport\Data;
+use Codercwm\QueueExport\CourseContent\Data;
+use Codercwm\QueueExport\Destroy;
 use Codercwm\QueueExport\Exception;
 use Codercwm\QueueExport\File;
 use Codercwm\QueueExport\Id;
-use Codercwm\QueueExport\Info;
 use Codercwm\QueueExport\Log;
 use Codercwm\QueueExport\Progress;
-use Codercwm\QueueExport\QueueExport;
 use Codercwm\QueueExport\Services\LogService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Queue\SerializesModels;
@@ -22,7 +21,7 @@ class ExportQueue implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    private $qExId,$batchCurrent,$action;
+    private $qExId,$batchCurrent,$action,$delDir;
 
     /**
      * 任务运行的超时时间。
@@ -36,7 +35,7 @@ class ExportQueue implements ShouldQueue
      *
      * @var int
      */
-    public $tries = 2;
+    public $tries = 1;
 
     /**
      * Create a new job instance.
@@ -44,7 +43,7 @@ class ExportQueue implements ShouldQueue
      * @return void
      */
 
-    public function __construct($action,$q_ex_id,$batch_current=null)
+    public function __construct($action,$q_ex_id,$batch_current=null,$del_dir=null)
     {
         if(empty($q_ex_id) || !LaravelCache::has($q_ex_id)){
             throw new Exception('$q_ex_id错误');
@@ -56,6 +55,7 @@ class ExportQueue implements ShouldQueue
         $this->action = $action;
         $this->qExId = $q_ex_id;
         $this->batchCurrent = $batch_current;
+        $this->delDir = $del_dir;
     }
 
     /**
@@ -65,54 +65,41 @@ class ExportQueue implements ShouldQueue
      */
     public function handle()
     {
+        Id::set($this->qExId);
         $this->{$this->action}();
+        $this->after();
+
     }
 
     private function readData(){
         try{
             //throw new \Exception('手动失败');
-            Id::set($this->qExId);
             Data::read($this->batchCurrent);
         }catch (Exception $exception){
             Progress::fail($exception);
         }
-
-        //$expire_timestamp = Info::get('expire_timestamp');
-        //LaravelCache::put($this->qExId,Info::get(), ($expire_timestamp-time())/60);
     }
 
     private function delDir(){
-        Id::set($this->qExId);
-        $dir = File::dir();
-        if(is_dir($dir)){
-            $handler_del = opendir($dir);
-            while (($file = readdir($handler_del)) !== false) {
-                if ($file != "." && $file != "..") {
-                    $try_del = 0;
-                    //文件在压缩的时候，系统会给它加上一个随机的后缀，有时候导致这里删除时找不到文件
-                    //把它奇怪的后缀去掉
-                    $del_file = $dir . "/" . $file;
-                    if(!file_exists($del_file)){
-                        $del_file = rtrim($dir . "/" . $file,'.'.substr(strrchr($file, '.'), 1));
-                    }
-                    while (true){
+        try{
+            $dir = $this->delDir;
+            if(is_dir($dir)){
+                $handler_del = opendir($dir);
+                while (($file = readdir($handler_del)) !== false) {
+                    if ($file != "." && $file != "..") {
+                        $del_file = $dir . "/" . $file;
+
                         if(is_file($del_file)){
                             //删除文件
-                            unlink($del_file);
-                            break;
-                        }elseif($try_del>5){
-                            //'超过重试次数，不删了'
-                            break;
-                        }else{
-                            sleep(1);
-                            //'开始重试'
-                            $try_del++;
+                            @unlink($del_file);
                         }
                     }
                 }
+                @closedir($dir);
+                @rmdir($dir);
             }
-            @closedir($dir);
-            @rmdir($dir);
+        }catch (Exception $exception){
+
         }
     }
 
@@ -125,5 +112,11 @@ class ExportQueue implements ShouldQueue
     public function failed(\Exception $exception)
     {
         Progress::fail($exception);
+        $this->after();
     }
+
+    public function after(){
+        Destroy::destroy();
+    }
+
 }

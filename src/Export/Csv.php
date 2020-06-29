@@ -4,16 +4,17 @@ namespace Codercwm\QueueExport\Export;
 
 use Codercwm\QueueExport\Build;
 use Codercwm\QueueExport\Cache;
-use Codercwm\QueueExport\Config;
 use Codercwm\QueueExport\FieldValue;
-use Codercwm\QueueExport\Info;
+use Codercwm\QueueExport\CourseContent\Info;
 use Codercwm\QueueExport\Progress;
+use Codercwm\QueueExport\CourseContent\Config;
 
 class Csv{
 
     public function creation(){
         Progress::incrRead(Info::get('total_count'));
         Progress::incrWrite(Info::get('total_count'));
+        Progress::incrMerge(Info::get('total_count'));
         Cache::complete(true);
         Cache::downloadUrl(request()->getSchemeAndHttpHost().'/'.Config::get('route_prefix').'/queue-export-csv?taskId='.Info::get('task_id'));
     }

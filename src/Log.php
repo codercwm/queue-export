@@ -3,6 +3,7 @@
 namespace Codercwm\QueueExport;
 
 use Codercwm\QueueExport\Services\LogService;
+use Codercwm\QueueExport\CourseContent\Info;
 
 class Log{
     public static function write($exception){
@@ -17,6 +18,6 @@ class Log{
             }
         }
 
-        LogService::write('['.Info::get('task_id').']'.$str,'EXPORT_QUEUE');
+        LogService::write('['.Id::get().']'.$str,'EXPORT_QUEUE');
     }
 }

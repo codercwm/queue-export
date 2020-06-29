@@ -1,6 +1,7 @@
 <?php
 
 namespace Codercwm\QueueExport;
+use Codercwm\QueueExport\CourseContent\Info;
 
 class Build{
 

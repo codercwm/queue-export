@@ -3,6 +3,7 @@
 namespace Codercwm\QueueExport;
 
 use Illuminate\Support\Facades\Cache as LaravelCache;
+use Codercwm\QueueExport\CourseContent\Info;
 
 class Progress{
 
@@ -42,6 +43,25 @@ class Progress{
             $task_id = Id::get();
         }
         return LaravelCache::get($task_id.'_progress_read');
+    }
+
+    //设置合并进度
+    public static function incrMerge($incr){
+        if(0==$incr){
+            Cache::add('progress_merge',0);
+        }else{
+            Cache::increment('progress_merge',$incr);
+        }
+
+        return $incr;
+    }
+
+    //获取写入进度
+    public static function getMerge($task_id=null){
+        if(is_null($task_id)){
+            $task_id = Id::get();
+        }
+        return LaravelCache::get($task_id.'_progress_merge');
     }
 
     /*
@@ -84,7 +104,6 @@ class Progress{
         Cache::isCancel(true);
         Cache::showName('任务已取消');
         File::delDir();
-        LaravelCache::forget(File::path(true));
         if($del){
             self::del();
         }
@@ -101,7 +120,7 @@ class Progress{
         LaravelCache::forget(Id::get().'_complete');
         LaravelCache::forget(Id::get().'_progress_read');
         LaravelCache::forget(Id::get().'_progress_write');
-        LaravelCache::forget(File::path(true));
+        LaravelCache::forget(Id::get().'_progress_merge');
     }
 
     /**
@@ -111,8 +130,6 @@ class Progress{
         if(LaravelCache::has(Id::get()) && ('任务已取消'!=Cache::showName())){
             Cache::isFail(true);
             Cache::showName('任务执行失败');
-            //清除数据缓存
-            LaravelCache::forget(File::path(true));
         }
         Log::write($exception);
     }
