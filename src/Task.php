@@ -40,7 +40,7 @@ class Task{
                         /
                         ($data['total_count']+$data['total_count']+$data['total_count'])
                         ,100,0);
-                    if($percent>98) $percent = 96;
+                    if($percent>99) $percent = 99;
                 }else{
                     $percent = 100;
                 }
