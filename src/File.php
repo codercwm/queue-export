@@ -134,7 +134,7 @@ class File{
                     }
                 }
                 $reader->close();
-                unlink($read_file);
+                //unlink($read_file);
             }
             $writer->close();
         }
