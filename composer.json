@@ -1,7 +1,7 @@
 {
     "name": "codercwm/queue-export",
     "require": {
-        "php": ">=7.2.0",
+        "php": ">=7.0.0",
         "box/spout": "^3.1.0",
         "monolog/monolog": "~1.12",
         "aliyuncs/oss-sdk-php": "^2.3"
